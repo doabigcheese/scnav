@@ -1,0 +1,61 @@
+{
+  "sdk": 3,
+  "version": 100,
+  "name": "SCNav",
+  "id": "SCNav",
+  "categories": [
+    {
+      "id": "Main",
+      "name": "SC Navi",
+      "actions": [
+        {
+          "id": "SelectDstPlanet",
+          "name": "Select the Planet of the Destination POI",
+          "prefix": "Select Planet: ",
+          "type": "choice",
+          "label": "Planet to go to",
+          "default": "Daymar",
+          "valueChoices": [
+               "Yela",
+               "Daymar",
+               "Magda",
+               "MicroTech",
+               "Hurston",
+               "Aberdeen"
+          ]
+        },
+        {
+          "id": "SelectPOIonPlanet",
+          "name": "Select the POI of the already selected Planet",
+          "prefix": "plugin",
+          "type": "communicate",
+          "tryInline": true,
+          "format": "Print({$ExampleTextData$})",
+          "data": [
+            {
+              "id": "ExampleTextData2",
+              "type": "text",
+              "label": "text",
+              "default": "Hello World"
+            }
+          ]
+        },
+        {
+          "id": "savePOI",
+          "name": "Save the new POI under custom name",
+          "prefix": "plugin",
+          "type": "text",
+          "default":"new name"
+        },
+      ],
+      "states": [
+        {
+          "id": "SCNavState",
+          "type": "text",
+          "desc": "Waiting for User selection",
+          "default": "None"
+        }
+      ]
+    }
+  ]
+}
