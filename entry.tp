@@ -9,50 +9,104 @@
       "name": "SC Navi",
       "actions": [
         {
-          "id": "SelectDstPlanet",
-          "name": "Select the Planet of the Destination POI",
-          "prefix": "Select Planet: ",
-          "type": "choice",
-          "label": "Planet to go to",
-          "default": "Daymar",
-          "valueChoices": [
-               "Yela",
-               "Daymar",
-               "Magda",
-               "MicroTech",
-               "Hurston",
-               "Aberdeen"
-          ]
-        },
-        {
-          "id": "SelectPOIonPlanet",
-          "name": "Select the POI of the already selected Planet",
-          "prefix": "plugin",
+          "id": "UpPlanet",
+          "name": "Scrolling Planet List up",
           "type": "communicate",
-          "tryInline": true,
-          "format": "Print({$ExampleTextData$})",
-          "data": [
-            {
-              "id": "ExampleTextData2",
-              "type": "text",
-              "label": "text",
-              "default": "Hello World"
-            }
-          ]
+          "label": "Up Planetlist",
+          "prefix":"Plugin"
+          
         },
         {
-          "id": "savePOI",
-          "name": "Save the new POI under custom name",
-          "prefix": "plugin",
-          "type": "text",
-          "default":"new name"
+          "id": "DownPlanet",
+          "name": "Scrolling Planet List down",
+          "type": "communicate",
+          "label": "Down Planetlist",
+          "prefix":"Plugin"
+          
         },
+        {
+          "id": "UpPoiName",
+          "name": "Scrolling Poi Name List up",
+          "type": "communicate",
+          "label": "Up POI List",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "DownPoiName",
+          "name": "Scrolling Poi Name List down",
+          "type": "communicate",
+          "label": "Down Poi Llist",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "startNav",
+          "name": "Start Navigation",
+          "type": "communicate",
+          "label": "Start Nav",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "saveLocation",
+          "name": "Save Location",
+          "type": "communicate",
+          "label": "Save Location",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "updateLocation",
+          "name": "Update Location",
+          "type": "communicate",
+          "label": "Update Location",
+          "prefix":"Plugin"
+          
+        }
+      
       ],
       "states": [
         {
-          "id": "SCNavState",
+          "id": "selectedPlanet",
           "type": "text",
-          "desc": "Waiting for User selection",
+          "desc": "Selected Planet Name",
+          "default": "None"
+        },
+        {
+          "id": "selectedPOI",
+          "type": "text",
+          "desc": "Selected POI Name",
+          "default": "None"
+        },
+        {
+          "id": "nearestQTMarkerName",
+          "type": "text",
+          "desc": "Nearest Quantum Travel Marker",
+          "default": "None"
+        },
+        {
+          "id": "nearestQTMarkerNameDistance",
+          "type": "text",
+          "desc": "Distance to Nearest QT Marker",
+          "default": "None"
+        },
+        {
+          "id": "Bearing",
+          "type": "text",
+          "desc": "Bearing on Compass",
+          "default": "None"
+        },
+        {
+          "id": "DistanceToDst",
+          "type": "text",
+          "desc": "Distanze to Destination",
+          "default": "None"
+        },
+        {
+          "id": "currentDstName",
+          "type": "text",
+          "desc": "Current Destination Name",
           "default": "None"
         }
       ]
