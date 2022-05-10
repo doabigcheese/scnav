@@ -71,6 +71,14 @@
           "label": "Start Nav2Coords",
           "prefix":"Plugin"
           
+        },
+        {
+          "id": "toggle_wo_qtmarker",
+          "name": "Toggles Database with without QT Markers",
+          "type": "communicate",
+          "label": "ToggleQTMarkers",
+          "prefix":"Plugin"
+          
         }
       
       ],

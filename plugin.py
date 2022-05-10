@@ -16,6 +16,8 @@ import csv
 # Setup callbacks and connection
 TPClient = TP.Client("SCNav")
 
+toggle_qt_marker_switch = True
+
 planetsListPointer = 0
 poiListPointer = 0
 Mode = "Planetary Navigation"
@@ -30,13 +32,29 @@ Container_list = []
 for i in Database["Containers"]:
     Container_list.append(Database["Containers"][i]["Name"])
 Planetary_POI_list = {}
-for container_name in Database["Containers"]:
-    Planetary_POI_list[container_name] = []
-    for poi in Database["Containers"][container_name]["POI"]:
-        if "OM-" not in poi and "Comm Array" not in poi: 
-          Planetary_POI_list[container_name].append(poi)
+container_name = ""
 
-
+def loadPOIList():
+    global Planetary_POI_list, container_name, Database
+    print("loadPOIList")
+    Planetary_POI_list.clear()
+    
+    for container_name in Database["Containers"]:
+        Planetary_POI_list[container_name] = []
+        for poi in Database["Containers"][container_name]["POI"]:
+            if toggle_qt_marker_switch == True:
+                if "OM-" not in poi and "Comm Array" not in poi and Database["Containers"][container_name]["POI"][poi]["QTMarker"] == "FALSE": 
+                    Planetary_POI_list[container_name].append(poi)
+                    print("false:", poi)
+            else:
+                if  "Comm Array" not in poi: #"OM-" not in poi and
+                    Planetary_POI_list[container_name].append(poi)
+                    print("true:", poi)        
+    TPClient.stateUpdate("selectedPlanet",  Container_list[planetsListPointer])
+    TPClient.stateUpdate("selectedPOI", Planetary_POI_list[Container_list[planetsListPointer]][0] )
+    
+    
+loadPOIList()
     
 # --------------------- NAV Magic -----------------------
 
@@ -121,7 +139,7 @@ def readClipboard():
         #update the memory with the new content
         Old_clipboard = new_clipboard
 
-        New_time = time.time() - 2.000 # test: substract 2 sec for better accuracy?
+        New_time = time.time() - 13.000 # Daymar -15
 
         #If it contains some coordinates
         if new_clipboard.startswith("Coordinates:"):
@@ -590,7 +608,7 @@ def onStart(data):
 @TPClient.on(TP.TYPES.onAction) # Or 'action'
 
 def onAction(data):
-    global planetsListPointer,poiListPointer,Container_list, Planetary_POI_list, Target, Actual_Container
+    global planetsListPointer,poiListPointer,Container_list, Planetary_POI_list, Target, Actual_Container, toggle_qt_marker_switch
     print(data)
     # do something based on the action ID and the data value
     
@@ -634,6 +652,7 @@ def onAction(data):
       # get the value from the action data (a string the user specified)
       print("startNav for ", Container_list[planetsListPointer], ", ", Planetary_POI_list[Container_list[planetsListPointer]][poiListPointer] )
       Target = Database["Containers"][Container_list[planetsListPointer]]["POI"][f'{Planetary_POI_list[Container_list[planetsListPointer]][poiListPointer]}']
+      TPClient.stateUpdate("currentDstName", Target['Name'] )
       readClipboard()
       print(Target)
     
@@ -643,7 +662,19 @@ def onAction(data):
       #Target = {'Name': 'Custom POI', 'Container': f'{Container_list[planetsListPointer]}', 'X': float(Planetary_X_Custom_POI_Entry.get()), 'Y': float(Planetary_Y_Custom_POI_Entry.get()), 'Z': float(Planetary_Z_Custom_POI_Entry.get()), "QTMarker": "FALSE"}
       readClipboard()
       print(Target)
-        
+    
+    if data['actionId'] == "toggle_wo_qtmarker":
+      # get the value from the action data (a string the user specified)
+      if toggle_qt_marker_switch == False: toggle_qt_marker_switch = True
+      else: toggle_qt_marker_switch = False
+      
+      print("Toggle wo qt marker to ", toggle_qt_marker_switch)
+      poiListPointer = 0
+      planetsListPointer = 0
+      loadPOIList()
+      
+      
+          
     if data['actionId'] == "saveLocation":
       # get the value from the action data (a string the user specified)
       print("saveLocation:")
