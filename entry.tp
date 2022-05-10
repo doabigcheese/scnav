@@ -63,6 +63,14 @@
           "label": "Update Location",
           "prefix":"Plugin"
           
+        },
+        {
+          "id": "startNav2Coordinates",
+          "name": "Start Navigation to Coordinates",
+          "type": "communicate",
+          "label": "Start Nav2Coords",
+          "prefix":"Plugin"
+          
         }
       
       ],
@@ -107,6 +115,12 @@
           "id": "currentDstName",
           "type": "text",
           "desc": "Current Destination Name",
+          "default": "None"
+        },
+        {
+          "id": "currentLocationPlayer",
+          "type": "text",
+          "desc": "Current Location Player",
           "default": "None"
         }
       ]

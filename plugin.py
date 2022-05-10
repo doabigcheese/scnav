@@ -9,6 +9,7 @@ import datetime
 import csv
 
 
+
 #required: pip install TouchPortal-API
 #required: python v3.8
 
@@ -21,6 +22,7 @@ Mode = "Planetary Navigation"
 Old_clipboard = ""
 Target = ""
 Old_time = time.time()
+Actual_Container = {}
 #setup DATA, Database.json from valalol's sc navi tool https://github.com/Valalol/Star-Citizen-Navigation/releases
 with open('Database.json') as f:
     Database = json.load(f)
@@ -35,6 +37,7 @@ for container_name in Database["Containers"]:
           Planetary_POI_list[container_name].append(poi)
 
 
+    
 # --------------------- NAV Magic -----------------------
 
 
@@ -99,7 +102,7 @@ Old_time = time.time()
 
 
 def readClipboard():
-    global Old_clipboard,Target, Old_time
+    global Old_clipboard,Target, Old_time, Actual_Container
     #Get the new clipboard content
     new_clipboard = pyperclip.paste()
 
@@ -118,7 +121,7 @@ def readClipboard():
         #update the memory with the new content
         Old_clipboard = new_clipboard
 
-        New_time = time.time()
+        New_time = time.time() - 2.000 # test: substract 2 sec for better accuracy?
 
         #If it contains some coordinates
         if new_clipboard.startswith("Coordinates:"):
@@ -546,10 +549,13 @@ def readClipboard():
                 print("New data :", json.dumps(new_data))
                 sys.stdout.flush()
                 TPClient.stateUpdate("currentDstName", Target['Name'] )
-                TPClient.stateUpdate("DistanceToDst", f"{round(New_Distance_to_POI_Total, 3)} km" )
-                TPClient.stateUpdate("Bearing", f"{round(Bearing, 1)}°" )
-                TPClient.stateUpdate("nearestQTMarkerNameDistance", f"{Target_to_POIs_Distances_Sorted[0]['Name']} : {round(Target_to_POIs_Distances_Sorted[0]['Distance'], 3)} km" )
-                #TPClient.stateUpdate("nearestQTMarkerName", Target['Name'] )
+                TPClient.stateUpdate("DistanceToDst", f"{round(New_Distance_to_POI_Total, 1)} km" )
+                TPClient.stateUpdate("Bearing", f"{round(Bearing, 0)}°" )
+                TPClient.stateUpdate("nearestQTMarkerNameDistance", f"{Target_to_POIs_Distances_Sorted[0]['Name']} : {round(Target_to_POIs_Distances_Sorted[0]['Distance'], 1)} km" )
+                where_am_i = "Current: " , Actual_Container['Name'] , ", x:", round(New_player_local_rotated_coordinates['X'], 3), " y:", round(New_player_local_rotated_coordinates['Y'], 3), " z:", round(New_player_local_rotated_coordinates['Z'], 3)
+                print(where_am_i)
+                TPClient.stateUpdate("currentLocationPlayer", str(where_am_i) )
+                
 
 
 
@@ -584,7 +590,7 @@ def onStart(data):
 @TPClient.on(TP.TYPES.onAction) # Or 'action'
 
 def onAction(data):
-    global planetsListPointer,poiListPointer,Container_list, Planetary_POI_list, Target
+    global planetsListPointer,poiListPointer,Container_list, Planetary_POI_list, Target, Actual_Container
     print(data)
     # do something based on the action ID and the data value
     
@@ -630,13 +636,37 @@ def onAction(data):
       Target = Database["Containers"][Container_list[planetsListPointer]]["POI"][f'{Planetary_POI_list[Container_list[planetsListPointer]][poiListPointer]}']
       readClipboard()
       print(Target)
-      
+    
+    if data['actionId'] == "startNav2Coordinates":
+      # get the value from the action data (a string the user specified)
+      print("startNav for ", Container_list[planetsListPointer], ", x y z ")
+      #Target = {'Name': 'Custom POI', 'Container': f'{Container_list[planetsListPointer]}', 'X': float(Planetary_X_Custom_POI_Entry.get()), 'Y': float(Planetary_Y_Custom_POI_Entry.get()), 'Z': float(Planetary_Z_Custom_POI_Entry.get()), "QTMarker": "FALSE"}
+      readClipboard()
+      print(Target)
+        
     if data['actionId'] == "saveLocation":
       # get the value from the action data (a string the user specified)
-      print("saveLocation")
+      print("saveLocation:")
+      print(Actual_Container['Name'])
+      print("player_x " , round(New_player_local_rotated_coordinates['X'], 3))
+      print("player_y " , round(New_player_local_rotated_coordinates['Y'], 3))
+      print("player_z " , round(New_player_local_rotated_coordinates['Z'], 3))
+      #"ArcCorp Mining Area 141": {
+      #              "Name": "ArcCorp Mining Area 141",
+      #              "Container": "Daymar",
+      #              "X": -18.167,
+      #              "Y": 180.362,
+      #              "Z": -232.76,
+      #              "qw": -0.22158949,
+      #              "qx": 0.71121597,
+      #              "qy": -0.62341905,
+      #              "qz": -0.23752604,
+      #              "QTMarker": "TRUE"
+      
     if data['actionId'] == "updateLocation":
       # get the value from the action data (a string the user specified)
       print("updateLocation")
+      
       readClipboard()
 
 # Shutdown handler, called when Touch Portal wants to stop your plugin.
