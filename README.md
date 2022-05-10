@@ -10,4 +10,6 @@ You need touch-portal PRO version. \
 
 Plugin currently not in autostart, have to be started manual with python3 plugin.py in the pluginfolder... \
 
+To be implemented: navigate to coordinates and save location as new POI
+
 ![alt text](https://github.com/doabigcheese/scnav/blob/main/screenshot.PNG?raw=true)
