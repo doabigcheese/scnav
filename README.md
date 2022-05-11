@@ -13,3 +13,7 @@ Plugin currently not in autostart, have to be started manual with python3 plugin
 To be implemented: navigate to coordinates and save location as new POI
 
 ![alt text](https://github.com/doabigcheese/scnav/blob/main/screenshot.PNG?raw=true)
+
+Dataflow:
+
+![alt text](https://github.com/doabigcheese/scnav/blob/main/Diagram.png?raw=true)
