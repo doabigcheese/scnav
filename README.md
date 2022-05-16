@@ -11,8 +11,8 @@ You need touch-portal PRO version. \
 Plugin currently not in autostart, have to be started manual with python3 plugin.py in the pluginfolder... 
 
 
-![alt text](https://github.com/doabigcheese/scnav/blob/main/IMG_0969.PNG?raw=true)
-![alt text](https://github.com/doabigcheese/scnav/blob/main/IMG_0970.PNG?raw=true)
+![alt text](https://github.com/doabigcheese/scnav/blob/main/IMG_0969.png?raw=true)
+![alt text](https://github.com/doabigcheese/scnav/blob/main/IMG_0970.png?raw=true)
 
 Dataflow:
 
