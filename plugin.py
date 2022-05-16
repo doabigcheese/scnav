@@ -19,7 +19,14 @@ TPClient = TP.Client("SCNav")
 toggle_qt_marker_switch = True
 
 planetsListPointer = 0
+edit_coordinate="none"
 poiListPointer = 0
+player_Longitude = 0
+New_player_local_rotated_coordinates = 0
+player_Latitude = 0
+custom_x = ""
+custom_y = ""
+custom_z = ""
 Mode = "Planetary Navigation"
 Old_clipboard = ""
 Target = ""
@@ -47,7 +54,7 @@ def loadPOIList():
                     Planetary_POI_list[container_name].append(poi)
                     print("false:", poi)
             else:
-                if  "Comm Array" not in poi: #"OM-" not in poi and
+                if "OM-" not in poi and "Comm Array" not in poi: #
                     Planetary_POI_list[container_name].append(poi)
                     print("true:", poi)        
     TPClient.stateUpdate("selectedPlanet",  Container_list[planetsListPointer])
@@ -120,7 +127,7 @@ Old_time = time.time()
 
 
 def readClipboard():
-    global Old_clipboard,Target, Old_time, Actual_Container
+    global Old_clipboard,Target, Old_time, Actual_Container, player_Longitude, player_Latitude, New_player_local_rotated_coordinates
     #Get the new clipboard content
     new_clipboard = pyperclip.paste()
 
@@ -594,7 +601,19 @@ def readClipboard():
 
                 #-------------------------------------------------------------------------------------------------------------------------------------------
 
-        
+def add_char(newChar):
+    global custom_x,custom_y,custom_z,edit_coordinate
+    if edit_coordinate == "none":
+            print("no coordinate selected")
+    elif edit_coordinate == "x":
+            custom_x = custom_x + newChar
+            TPClient.stateUpdate("custom_x", "X: " + custom_x)
+    elif edit_coordinate == "y":
+            custom_y = custom_y + newChar
+            TPClient.stateUpdate("custom_y", "Y: "+ custom_y) 
+    elif edit_coordinate == "z":
+            custom_z = custom_z + newChar
+            TPClient.stateUpdate("custom_z", "Z: "+ custom_z)         
             
 # This event handler will run once when the client connects to Touch Portal
 @TPClient.on(TP.TYPES.onConnect) # Or replace TYPES.onConnect with 'info'
@@ -608,7 +627,7 @@ def onStart(data):
 @TPClient.on(TP.TYPES.onAction) # Or 'action'
 
 def onAction(data):
-    global planetsListPointer,poiListPointer,Container_list, Planetary_POI_list, Target, Actual_Container, toggle_qt_marker_switch
+    global planetsListPointer,poiListPointer,Container_list, Planetary_POI_list, Target, Actual_Container, toggle_qt_marker_switch,custom_x,custom_y,custom_z,edit_coordinate
     print(data)
     # do something based on the action ID and the data value
     
@@ -656,13 +675,81 @@ def onAction(data):
       readClipboard()
       print(Target)
     
+      
     if data['actionId'] == "startNav2Coordinates":
       # get the value from the action data (a string the user specified)
-      print("startNav for ", Container_list[planetsListPointer], ", x y z ")
-      #Target = {'Name': 'Custom POI', 'Container': f'{Container_list[planetsListPointer]}', 'X': float(Planetary_X_Custom_POI_Entry.get()), 'Y': float(Planetary_Y_Custom_POI_Entry.get()), 'Z': float(Planetary_Z_Custom_POI_Entry.get()), "QTMarker": "FALSE"}
+      print("startNav for ", Container_list[planetsListPointer], ", ", custom_x, ", ", custom_y, ", ", custom_z)
+      Target = {'Name': 'Custom POI', 'Container': f'{Container_list[planetsListPointer]}', 'X': float(custom_x), 'Y': float(custom_y), 'Z': float(custom_z), "QTMarker": "FALSE"}
       readClipboard()
       print(Target)
     
+    if data['actionId'] == "enter_x":
+      # get the value from the action data (a string the user specified)
+      edit_coordinate = "x"
+      TPClient.stateUpdate("custom_x", "X: ?")
+      custom_x = ""
+
+    if data['actionId'] == "enter_y":
+      # get the value from the action data (a string the user specified)
+      edit_coordinate = "y"
+      TPClient.stateUpdate("custom_y", "Y: ?")
+      custom_y = ""
+
+    if data['actionId'] == "enter_z":
+      # get the value from the action data (a string the user specified)
+      edit_coordinate = "z"
+      TPClient.stateUpdate("custom_z", "Z: ?")   
+      custom_z = "" 
+    
+    if data['actionId'] == "takeover_custom_coordinates":
+      # get the value from the action data (a string the user specified)
+       custom_xyz = custom_x + ", " + custom_y + ", " + custom_z
+       print("Custom xzy: " + custom_xyz)
+       TPClient.stateUpdate("custom_xyz", custom_xyz)
+       edit_coordinate = "none"
+    
+    if data['actionId'] == "decimal":
+      # get the value from the action data (a string the user specified)
+      add_char(".") 
+
+    if data['actionId'] == "0":
+        add_char("0")        
+    if data['actionId'] == "1":
+        add_char("1")  
+    if data['actionId'] == "2":
+        add_char("2")
+    if data['actionId'] == "3":
+        add_char("3") 
+    if data['actionId'] == "4":
+        add_char("4") 
+    if data['actionId'] == "5":
+        add_char("5")
+    if data['actionId'] == "6":
+        add_char("6")
+    if data['actionId'] == "7":
+        add_char("7") 
+    if data['actionId'] == "8":
+        add_char("8")
+    if data['actionId'] == "9":
+        add_char("9")
+
+    if data['actionId'] == "plus_minus":
+        add_char("-")      
+
+    if data['actionId'] == "del":
+        if edit_coordinate == "none":
+            print("no coordinate selected")
+        elif edit_coordinate == "x":
+            custom_x = custom_x[:-1]
+            TPClient.stateUpdate("custom_x", "X: " + custom_x)
+        elif edit_coordinate == "y":
+            custom_y = custom_y[:-1]
+            TPClient.stateUpdate("custom_y", "Y: "+ custom_y) 
+        elif edit_coordinate == "z":
+            custom_z = custom_z[:-1]
+            TPClient.stateUpdate("custom_z", "Z: "+ custom_z) 
+
+
     if data['actionId'] == "toggle_wo_qtmarker":
       # get the value from the action data (a string the user specified)
       if toggle_qt_marker_switch == False: toggle_qt_marker_switch = True
@@ -682,6 +769,14 @@ def onAction(data):
       print("player_x " , round(New_player_local_rotated_coordinates['X'], 3))
       print("player_y " , round(New_player_local_rotated_coordinates['Y'], 3))
       print("player_z " , round(New_player_local_rotated_coordinates['Z'], 3))
+      
+      poi_name="Test1"
+      save_dic = {Actual_Container['Name']:{"Name":poi_name,"Container":Actual_Container['Name'],"X":round(New_player_local_rotated_coordinates['X'], 3),"Y":round(New_player_local_rotated_coordinates['Y'], 3),"Z":round(New_player_local_rotated_coordinates['Z'], 3),"QTMarker": "FALSE"}}
+      #save_data = ",{",Actual_Container['Name'],":{Name:",Actual_Container['Name'],"Container:",Actual_Container['Name'],",x: ",round(New_player_local_rotated_coordinates['X'], 3),"y: ",round(New_player_local_rotated_coordinates['Y'], 3),",z: ",round(New_player_local_rotated_coordinates['Z'], 3),"QTMarker: FALSE}\n"
+      with open("saved_pois.json", "a") as myfile:
+            myfile.write(json.dumps(save_dic))
+            print(json.dumps(save_dic))
+
       #"ArcCorp Mining Area 141": {
       #              "Name": "ArcCorp Mining Area 141",
       #              "Container": "Daymar",

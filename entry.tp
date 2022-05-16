@@ -79,7 +79,144 @@
           "label": "ToggleQTMarkers",
           "prefix":"Plugin"
           
+        },
+        {
+          "id": "plus_minus",
+          "name": "Plus Minus",
+          "type": "communicate",
+          "label": "+_-",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "decimal",
+          "name": "Decimal Point",
+          "type": "communicate",
+          "label": "Decimal",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "del",
+          "name": "Delete Number",
+          "type": "communicate",
+          "label": "del",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "1",
+          "name": "Number 1",
+          "type": "communicate",
+          "label": "1",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "2",
+          "name": "Number 2",
+          "type": "communicate",
+          "label": "2",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "3",
+          "name": "Number 3",
+          "type": "communicate",
+          "label": "3",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "4",
+          "name": "Number 4",
+          "type": "communicate",
+          "label": "4",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "5",
+          "name": "Number 5",
+          "type": "communicate",
+          "label": "5",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "6",
+          "name": "Number 6",
+          "type": "communicate",
+          "label": "6",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "7",
+          "name": "Number 7",
+          "type": "communicate",
+          "label": "7",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "8",
+          "name": "Number 8",
+          "type": "communicate",
+          "label": "8",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "9",
+          "name": "Number 9",
+          "type": "communicate",
+          "label": "9",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "0",
+          "name": "Number 0",
+          "type": "communicate",
+          "label": "0",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "enter_x",
+          "name": "Enter Custom X",
+          "type": "communicate",
+          "label": "enter_x",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "enter_y",
+          "name": "Enter Custom Y",
+          "type": "communicate",
+          "label": "enter_y",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "enter_z",
+          "name": "Enter Custom Z",
+          "type": "communicate",
+          "label": "enter_z",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "takeover_custom_coordinates",
+          "name": "Takeover custom coordinates",
+          "type": "communicate",
+          "label": "takeover",
+          "prefix":"Plugin"
+          
         }
+        
       
       ],
       "states": [
@@ -129,6 +266,30 @@
           "id": "currentLocationPlayer",
           "type": "text",
           "desc": "Current Location Player",
+          "default": "None"
+        },
+        {
+          "id": "custom_x",
+          "type": "text",
+          "desc": "Custom X Coordinates",
+          "default": "None"
+        },
+        {
+          "id": "custom_y",
+          "type": "text",
+          "desc": "Custom Y Coordinates",
+          "default": "None"
+        },
+        {
+          "id": "custom_z",
+          "type": "text",
+          "desc": "Custom Z Coordinates",
+          "default": "None"
+        },
+        {
+          "id": "custom_xyz",
+          "type": "text",
+          "desc": "Custom X Y Z Coordinates",
           "default": "None"
         }
       ]
