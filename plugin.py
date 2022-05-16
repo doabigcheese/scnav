@@ -24,6 +24,7 @@ poiListPointer = 0
 player_Longitude = 0
 New_player_local_rotated_coordinates = 0
 player_Latitude = 0
+correction_value = -13
 custom_x = ""
 custom_y = ""
 custom_z = ""
@@ -146,7 +147,7 @@ def readClipboard():
         #update the memory with the new content
         Old_clipboard = new_clipboard
 
-        New_time = time.time() - 13.000 # Daymar -15
+        New_time = time.time() + correction_value # Daymar -15
 
         #If it contains some coordinates
         if new_clipboard.startswith("Coordinates:"):
@@ -614,7 +615,17 @@ def add_char(newChar):
     elif edit_coordinate == "z":
             custom_z = custom_z + newChar
             TPClient.stateUpdate("custom_z", "Z: "+ custom_z)         
-            
+
+
+@TPClient.on(TP.TYPES.onConnectorChange)
+def connectorManager(data):
+    global correction_value
+    if data['connectorId'] == "correctionvalueslider" :
+        correction_value=data['value'] * 0.5 - 25
+        print(correction_value)
+        TPClient.stateUpdate ("correction", str(correction_value) )
+
+
 # This event handler will run once when the client connects to Touch Portal
 @TPClient.on(TP.TYPES.onConnect) # Or replace TYPES.onConnect with 'info'
 def onStart(data):

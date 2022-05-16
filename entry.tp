@@ -7,6 +7,13 @@
     {
       "id": "Main",
       "name": "SC Navi",
+      "connectors": [
+        {       
+          "id": "correctionvalueslider",
+          "name": "Correctionvalue Slider",
+          "format": "Correctionvalue"
+        }
+      ],  
       "actions": [
         {
           "id": "UpPlanet",
@@ -290,6 +297,12 @@
           "id": "custom_xyz",
           "type": "text",
           "desc": "Custom X Y Z Coordinates",
+          "default": "None"
+        },
+        {
+          "id": "correction",
+          "type": "text",
+          "desc": "Correction Value",
           "default": "None"
         }
       ]
