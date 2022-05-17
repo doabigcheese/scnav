@@ -7,8 +7,17 @@ import pyperclip
 import time
 import datetime
 import csv
+import ntplib
 
-
+c = ntplib.NTPClient()
+response = c.request('uk.pool.ntp.org', version=3)
+server_time = response.tx_time
+#print(server_time)
+local_time = time.time()
+#print(local_time)
+time_difference = server_time - local_time
+print(round(time_difference,1))
+correction_value=round(time_difference,1)
 
 #required: pip install TouchPortal-API
 #required: python v3.8
@@ -24,7 +33,7 @@ poiListPointer = 0
 player_Longitude = 0
 New_player_local_rotated_coordinates = 0
 player_Latitude = 0
-correction_value = 0
+#correction_value = 0
 custom_x = ""
 custom_y = ""
 custom_z = ""
@@ -633,6 +642,7 @@ def onStart(data):
     # Update a state value in TouchPortal
     TPClient.stateUpdate("SCNavState", "Connected!")
     TPClient.stateUpdate ("selectedPlanet", Container_list[0])
+    TPClient.stateUpdate ("correction", str(correction_value))
 
 # Action handlers, called when user activates one of this plugin's actions in Touch Portal.
 @TPClient.on(TP.TYPES.onAction) # Or 'action'
