@@ -12,12 +12,10 @@ import ntplib
 c = ntplib.NTPClient()
 response = c.request('uk.pool.ntp.org', version=3)
 server_time = response.tx_time
-#print(server_time)
 local_time = time.time()
-#print(local_time)
 time_difference = server_time - local_time
 print(round(time_difference,1))
-correction_value=round(time_difference,1)
+correction_value=time_difference
 
 #required: pip install TouchPortal-API
 #required: python v3.8
@@ -155,9 +153,16 @@ def readClipboard():
 
         #update the memory with the new content
         Old_clipboard = new_clipboard
+        response = c.request('uk.pool.ntp.org', version=3)
+        server_time = response.tx_time
+        local_time = time.time()
+        time_difference = server_time - local_time
+        print(round(time_difference,5))
+        correction_value=time_difference
+        TPClient.stateUpdate ("correction", str(round(correction_value,5) ))
 
-        New_time = time.time() + correction_value # Daymar -15
-
+        New_time = time.time() + correction_value
+        
         #If it contains some coordinates
         if new_clipboard.startswith("Coordinates:"):
 
@@ -638,11 +643,13 @@ def connectorManager(data):
 # This event handler will run once when the client connects to Touch Portal
 @TPClient.on(TP.TYPES.onConnect) # Or replace TYPES.onConnect with 'info'
 def onStart(data):
+    global planetsListPointer,Container_list,Planetary_POI_list
     print("Connected!", data)
     # Update a state value in TouchPortal
     TPClient.stateUpdate("SCNavState", "Connected!")
     TPClient.stateUpdate ("selectedPlanet", Container_list[0])
-    TPClient.stateUpdate ("correction", str(correction_value))
+    TPClient.stateUpdate("selectedPOI", Planetary_POI_list[Container_list[planetsListPointer]][0] )
+    TPClient.stateUpdate ("correction", str(round(correction_value,5)))
 
 # Action handlers, called when user activates one of this plugin's actions in Touch Portal.
 @TPClient.on(TP.TYPES.onAction) # Or 'action'
