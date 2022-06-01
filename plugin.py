@@ -2,7 +2,7 @@ import TouchPortalAPI as TP
 import json
 import os
 import sys
-from math import sqrt, degrees, radians, cos, acos, sin, asin, atan2
+from math import sqrt, degrees, radians, cos, acos, sin, asin, tan, atan2, copysign, pi
 import pyperclip
 import time
 import datetime
@@ -12,10 +12,11 @@ import ntplib
 c = ntplib.NTPClient()
 response = c.request('uk.pool.ntp.org', version=3)
 server_time = response.tx_time
-local_time = time.time()
-time_difference = server_time - local_time
-print(round(time_difference,1))
-correction_value=time_difference
+offset = response.offset
+#local_time = time.time()
+#time_difference = server_time - local_time
+#print(str(time_difference) + " offset: " + str(offset))
+correction_value=offset # time_difference
 
 #required: pip install TouchPortal-API
 #required: python v3.8
@@ -23,7 +24,7 @@ correction_value=time_difference
 # Setup callbacks and connection
 TPClient = TP.Client("SCNav")
 
-toggle_qt_marker_switch = True
+toggle_qt_marker_switch = 0
 
 planetsListPointer = 0
 edit_coordinate="none"
@@ -48,23 +49,27 @@ for i in Database["Containers"]:
     Container_list.append(Database["Containers"][i]["Name"])
 Planetary_POI_list = {}
 container_name = ""
+Database_own = ""
 
 def loadPOIList():
-    global Planetary_POI_list, container_name, Database
+    global Planetary_POI_list, container_name, Database, Database_own
     print("loadPOIList")
     Planetary_POI_list.clear()
     
     for container_name in Database["Containers"]:
         Planetary_POI_list[container_name] = []
         for poi in Database["Containers"][container_name]["POI"]:
-            if toggle_qt_marker_switch == True:
-                if "OM-" not in poi and "Comm Array" not in poi and Database["Containers"][container_name]["POI"][poi]["QTMarker"] == "FALSE": 
+            if toggle_qt_marker_switch == 0: #without QT marker
+                if Database["Containers"][container_name]["POI"][poi]["QTMarker"] == "FALSE": 
                     Planetary_POI_list[container_name].append(poi)
                     print("false:", poi)
-            else:
-                if "OM-" not in poi and "Comm Array" not in poi: #
-                    Planetary_POI_list[container_name].append(poi)
-                    print("true:", poi)        
+            elif toggle_qt_marker_switch == 1: #saved pois
+                print("Loading saved POI list...")
+                with open('saved_pois.json') as f:
+                    Database_own = json.load(f)
+            else: #complete database.json               
+                Planetary_POI_list[container_name].append(poi)
+                print("true:", poi)        
     TPClient.stateUpdate("selectedPlanet",  Container_list[planetsListPointer])
     TPClient.stateUpdate("selectedPOI", Planetary_POI_list[Container_list[planetsListPointer]][0] )
     
@@ -72,7 +77,29 @@ def loadPOIList():
 loadPOIList()
     
 # --------------------- NAV Magic -----------------------
+def trig(angle):
+  r = radians(angle)
+  return cos(r), sin(r)
 
+def matrix(rotation=(0,0,0), translation=(0,0,0)):
+  xC, xS = trig(rotation[0])
+  yC, yS = trig(rotation[1])
+  zC, zS = trig(rotation[2])
+  dX = translation[0]
+  dY = translation[1]
+  dZ = translation[2]
+  return [[yC*xC, -zC*xS+zS*yS*xC, zS*xS+zC*yS*xC, dX],
+    [yC*xS, zC*xC+zS*yS*xS, -zS*xC+zC*yS*xS, dY],
+    [-yS, zS*yC, zC*yC, dZ],
+    [0, 0, 0, 1]]
+
+def transform(point=(0,0,0), vector=(0,0,0)):
+  p = [0,0,0]
+  for r in range(3):
+    p[r] += vector[r][3]
+    for c in range(3):
+      p[r] += point[c] * vector[r][c]
+  return p
 
 def vector_norm(a):
     """Returns the norm of a vector"""
@@ -97,7 +124,287 @@ def rotate_point_2D(Unrotated_coordinates, angle):
     Rotated_coordinates["Z"] = Unrotated_coordinates["Z"]
     return (Rotated_coordinates)
 
+def get_current_container(X : float, Y : float, Z : float):
+    Actual_Container = {
+        "Name": "None",
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "Rotation Speed": 0,
+        "Rotation Adjust": 0,
+        "OM Radius": 0,
+        "Body Radius": 0,
+        "POI": {}
+    }
+    for i in Database["Containers"] :
+        Container_vector = {"X" : Database["Containers"][i]["X"] - X, "Y" : Database["Containers"][i]["Y"] - Y, "Z" : Database["Containers"][i]["Z"] - Z}
+        if vector_norm(Container_vector) <= 3 * Database["Containers"][i]["OM Radius"]:
+            Actual_Container = Database["Containers"][i]
+    return Actual_Container
 
+
+def get_local_rotated_coordinates(Time_passed : float, X : float, Y : float, Z : float, Actual_Container : dict):
+
+    try:
+        Rotation_speed_in_degrees_per_second = 0.1 * (1/Actual_Container["Rotation Speed"])
+    except ZeroDivisionError:
+        Rotation_speed_in_degrees_per_second = 0
+
+    Rotation_state_in_degrees = ((Rotation_speed_in_degrees_per_second * Time_passed) + Actual_Container["Rotation Adjust"]) % 360
+
+    local_unrotated_coordinates = {
+        "X": X - Actual_Container["X"],
+        "Y": Y - Actual_Container["Y"],
+        "Z": Z - Actual_Container["Z"]
+    }
+
+    local_rotated_coordinates = rotate_point_2D(local_unrotated_coordinates, radians(-1*Rotation_state_in_degrees))
+
+    return local_rotated_coordinates
+
+
+def get_lat_long_height(X : float, Y : float, Z : float, Container : dict):
+    Radius = Container["Body Radius"]
+
+    Radial_Distance = sqrt(X**2 + Y**2 + Z**2)
+
+    Height = Radial_Distance - Radius
+
+    #Latitude
+    try :
+        Latitude = degrees(asin(Z/Radial_Distance))
+    except :
+        Latitude = 0
+
+    try :
+        Longitude = -1*degrees(atan2(X, Y))
+    except :
+        Longitude = 0
+
+    return [Latitude, Longitude, Height]
+
+
+def get_closest_POI(X : float, Y : float, Z : float, Container : dict, Quantum_marker : bool = False):
+
+    Distances_to_POIs = []
+
+    for POI in Container["POI"]:
+        Vector_POI = {
+            "X": abs(X - Container["POI"][POI]["X"]),
+            "Y": abs(Y - Container["POI"][POI]["Y"]),
+            "Z": abs(Z - Container["POI"][POI]["Z"])
+        }
+
+        Distance_POI = vector_norm(Vector_POI)
+
+        if Quantum_marker and Container["POI"][POI]["QTMarker"] == "TRUE" or not Quantum_marker:
+            Distances_to_POIs.append({"Name" : POI, "Distance" : Distance_POI})
+
+    Target_to_POIs_Distances_Sorted = sorted(Distances_to_POIs, key=lambda k: k['Distance'])
+    return Target_to_POIs_Distances_Sorted
+
+
+
+def get_closest_oms(X : float, Y : float, Z : float, Container : dict):
+    Closest_OM = {}
+
+    if X >= 0:
+        Closest_OM["X"] = {"OM" : Container["POI"]["OM-5"], "Distance" : vector_norm({"X" : X - Container["POI"]["OM-5"]["X"], "Y" : Y - Container["POI"]["OM-5"]["Y"], "Z" : Z - Container["POI"]["OM-5"]["Z"]})}
+    else:
+        Closest_OM["X"] = {"OM" : Container["POI"]["OM-6"], "Distance" : vector_norm({"X" : X - Container["POI"]["OM-6"]["X"], "Y" : Y - Container["POI"]["OM-6"]["Y"], "Z" : Z - Container["POI"]["OM-6"]["Z"]})}
+    if Y >= 0:
+        Closest_OM["Y"] = {"OM" : Container["POI"]["OM-3"], "Distance" : vector_norm({"X" : X - Container["POI"]["OM-3"]["X"], "Y" : Y - Container["POI"]["OM-3"]["Y"], "Z" : Z - Container["POI"]["OM-3"]["Z"]})}
+    else:
+        Closest_OM["Y"] = {"OM" : Container["POI"]["OM-4"], "Distance" : vector_norm({"X" : X - Container["POI"]["OM-4"]["X"], "Y" : Y - Container["POI"]["OM-4"]["Y"], "Z" : Z - Container["POI"]["OM-4"]["Z"]})}
+    if Z >= 0:
+        Closest_OM["Z"] = {"OM" : Container["POI"]["OM-1"], "Distance" : vector_norm({"X" : X - Container["POI"]["OM-1"]["X"], "Y" : Y - Container["POI"]["OM-1"]["Y"], "Z" : Z - Container["POI"]["OM-1"]["Z"]})}
+    else:
+        Closest_OM["Z"] = {"OM" : Container["POI"]["OM-2"], "Distance" : vector_norm({"X" : X - Container["POI"]["OM-2"]["X"], "Y" : Y - Container["POI"]["OM-2"]["Y"], "Z" : Z - Container["POI"]["OM-2"]["Z"]})}
+
+    return Closest_OM
+
+
+
+def get_sunset_sunrise_predictions(X : float, Y : float, Z : float, Latitude : float, Longitude : float, Height : float, Container : dict, Star : dict):
+    global Time_passed_since_reference_in_seconds
+    try :
+        # Stanton X Y Z coordinates in refrence of the center of the system
+        sx, sy, sz = Star["X"], Star["Y"], Star["Z"]
+        
+        # Container X Y Z coordinates in refrence of the center of the system
+        bx, by, bz = Container["X"], Container["Y"], Container["Z"]
+        
+        # Rotation speed of the container
+        rotation_speed = Container["Rotation Speed"]
+        
+        # Container qw/qx/qy/qz quaternion rotation 
+        qw, qx, qy, qz = Container["qw"], Container["qx"], Container["qy"], Container["qz"]
+        
+        # Stanton X Y Z coordinates in refrence of the center of the container
+        bsx = ((1-(2*qy**2)-(2*qz**2))*(sx-bx))+(((2*qx*qy)-(2*qz*qw))*(sy-by))+(((2*qx*qz)+(2*qy*qw))*(sz-bz))
+        bsy = (((2*qx*qy)+(2*qz*qw))*(sx-bx))+((1-(2*qx**2)-(2*qz**2))*(sy-by))+(((2*qy*qz)-(2*qx*qw))*(sz-bz))
+        bsz = (((2*qx*qz)-(2*qy*qw))*(sx-bx))+(((2*qy*qz)+(2*qx*qw))*(sy-by))+((1-(2*qx**2)-(2*qy**2))*(sz-bz))
+        
+        # Solar Declination of Stanton
+        Solar_declination = degrees(acos((((sqrt(bsx**2+bsy**2+bsz**2))**2)+((sqrt(bsx**2+bsy**2))**2)-(bsz**2))/(2*(sqrt(bsx**2+bsy**2+bsz**2))*(sqrt(bsx**2+bsy**2)))))*copysign(1,bsz)
+        
+        # Radius of Stanton
+        StarRadius = Star["Body Radius"] # OK
+        
+        # Apparent Radius of Stanton
+        Apparent_Radius = degrees(asin(StarRadius/(sqrt((bsx)**2+(bsy)**2+(bsz)**2))))
+        
+        # Length of day is the planet rotation rate expressed as a fraction of a 24 hr day.
+        LengthOfDay = 3600*rotation_speed/86400
+        
+        
+        
+        # A Julian Date is simply the number of days and fraction of a day since a specific event. (01/01/2020 00:00:00)
+        JulianDate = Time_passed_since_reference_in_seconds/(24*60*60) # OK
+        
+        # Determine the current day/night cycle of the planet.
+        # The current cycle is expressed as the number of day/night cycles and fraction of the cycle that have occurred
+        # on that planet since Jan 1, 2020 given the length of day. While the number of sunrises that have occurred on the 
+        # planet since Jan 1, 2020 is interesting, we are really only interested in the fractional part.
+        try :
+            CurrentCycle = JulianDate/LengthOfDay
+        except ZeroDivisionError :
+            CurrentCycle = 1
+        
+        
+        # The rotation correction is a value that accounts for the rotation of the planet on Jan 1, 2020 as we don’t know
+        # exactly when the rotation of the planet started.  This value is measured and corrected during a rotation
+        # alignment that is performed periodically in-game and is retrieved from the navigation database.
+        RotationCorrection = Container["Rotation Adjust"]
+        
+        # CurrentRotation is how far the planet has rotated in this current day/night cycle expressed in the number of
+        # degrees remaining before the planet completes another day/night cycle.
+        CurrentRotation = (360-(CurrentCycle%1)*360-RotationCorrection)%360
+        
+        
+        # Meridian determine where the star would be if the planet did not rotate.
+        # Between the planet and Stanton there is a plane that contains the north pole and south pole
+        # of the planet and the center of Stanton. Locations on the surface of the planet on this plane
+        # experience the phenomenon we call noon.
+        Meridian = degrees( (atan2(bsy,bsx)-(pi/2)) % (2*pi) )
+        
+        # Because the planet rotates, the location of noon is constantly moving. This equation
+        # computes the current longitude where noon is occurring on the planet.
+        SolarLongitude = CurrentRotation-(0-Meridian)%360
+        if SolarLongitude>180:
+            SolarLongitude = SolarLongitude-360
+        elif SolarLongitude<-180:
+            SolarLongitude = SolarLongitude+360
+        
+        
+        
+        # The difference between Longitude and Longitude360 is that for Longitude, Positive values
+        # indicate locations in the Eastern Hemisphere, Negative values indicate locations in the Western
+        # Hemisphere.
+        # For Longitude360, locations in longitude 0-180 are in the Eastern Hemisphere, locations in
+        # longitude 180-359 are in the Western Hemisphere.
+        Longitude360 = Longitude%360 # OK
+        
+        # Determine correction for location height
+        ElevationCorrection = degrees(acos(Container["Body Radius"]/(Container["Body Radius"]))) if Height<0 else degrees(acos(Container["Body Radius"]/(Container["Body Radius"]+Height)))
+        
+        # Determine Rise/Set Hour Angle
+        # The star rises at + (positive value) rise/set hour angle and sets at - (negative value) rise/set hour angle
+        # Solar Declination and Apparent Radius come from the first set of equations when we determined where the star is.
+        RiseSetHourAngle = degrees(acos(-tan(radians(Latitude))*tan(radians(Solar_declination))))+Apparent_Radius+ElevationCorrection
+        
+        # Determine the current Hour Angle of the star
+        
+        # Hour Angles between 180 and the +Rise Hour Angle are before sunrise.
+        # Between +Rise Hour angle and 0 are after sunrise before noon. 0 noon,
+        # between 0 and -Set Hour Angle is afternoon,
+        # between -Set Hour Angle and -180 is after sunset.
+        
+        # Once the current Hour Angle is determined, we now know the actual angle (in degrees)
+        # between the position of the star and the +rise hour angle and the -set hour angle.
+        HourAngle = (CurrentRotation-(Longitude360-Meridian)%360)%360
+        if HourAngle > 180:
+            HourAngle = HourAngle - 360
+        
+        
+        # Determine the planet Angular Rotation Rate.
+        # Angular Rotation Rate is simply the Planet Rotation Rate converted from Hours into degrees per minute.
+        # The Planet Rotation Rate is datamined from the game files.
+        try :
+            AngularRotationRate = 6/rotation_speed # OK
+        except ZeroDivisionError :
+            AngularRotationRate = 0
+        
+        
+        if AngularRotationRate != 0 :
+            midnight = (HourAngle + 180) / AngularRotationRate
+            
+            morning = (HourAngle - (RiseSetHourAngle+12)) / AngularRotationRate
+            if HourAngle <= RiseSetHourAngle+12:
+                morning = morning + LengthOfDay*24*60
+            
+            sunrise = (HourAngle - RiseSetHourAngle) / AngularRotationRate
+            if HourAngle <= RiseSetHourAngle:
+                sunrise = sunrise + LengthOfDay*24*60
+            
+            noon = (HourAngle - 0) / AngularRotationRate
+            if HourAngle <= 0:
+                noon = noon + LengthOfDay*24*60
+            
+            sunset = (HourAngle - -1*RiseSetHourAngle) / AngularRotationRate
+            if HourAngle <= -1*RiseSetHourAngle:
+                sunset = sunset + LengthOfDay*24*60
+            
+            evening = (HourAngle - (-1*RiseSetHourAngle-12)) / AngularRotationRate
+            if HourAngle <= -1*(RiseSetHourAngle-12):
+                evening = evening + LengthOfDay*24*60
+        else :
+            midnight = 0
+            morning = 0
+            sunrise = 0
+            noon = 0
+            sunset = 0
+            evening = 0
+        
+        
+        
+        
+        if 180 >= HourAngle > RiseSetHourAngle+12:
+            state_of_the_day = "After midnight"
+            next_event = "Sunrise"
+            next_event_time = sunrise
+        elif RiseSetHourAngle+12 >= HourAngle > RiseSetHourAngle:
+            state_of_the_day = "Morning Twilight"
+            next_event = "Sunrise"
+            next_event_time = sunrise
+        elif RiseSetHourAngle >= HourAngle > 0:
+            state_of_the_day = "Morning"
+            next_event = "Sunset"
+            next_event_time = sunset
+        elif 0 >= HourAngle > -1*RiseSetHourAngle:
+            state_of_the_day = "Afternoon"
+            next_event = "Sunset"
+            next_event_time = sunset
+        elif -1*RiseSetHourAngle >= HourAngle > -1*RiseSetHourAngle-12:
+            state_of_the_day = "Evening Twilight"
+            next_event = "Sunrise"
+            next_event_time = sunrise
+        elif -1*RiseSetHourAngle-12 >= HourAngle >= -180:
+            state_of_the_day = "Before midnight"
+            next_event = "Sunrise"
+            next_event_time = sunrise
+        
+        if AngularRotationRate == 0 :
+            next_event = "N/A"
+        
+        return [state_of_the_day, next_event, next_event_time]
+    
+    except Exception as e:
+        print(f"Error in sunrise/sunset calculations: \n{e}\nValues were:\n-X : {X}\n-Y : {Y}\n-Z : {Z}\n-Latitude : {Latitude}\n-Longitude : {Longitude}\n-Height : {Height}\n-Container : {Container['Name']}\n-Star : {Star['Name']}")
+        sys.stdout.flush()
+        return ["Unknown", "Unknown", 0]
+    
+    
 #Sets some variables
 Reference_time_UTC = datetime.datetime(2020, 1, 1)
 Epoch = datetime.datetime(1970, 1, 1)
@@ -135,7 +442,7 @@ Old_time = time.time()
 
 
 def readClipboard():
-    global Old_clipboard,Target, Old_time, Actual_Container, player_Longitude, player_Latitude, New_player_local_rotated_coordinates
+    global Old_clipboard,Target, Old_time, Actual_Container, player_Longitude, player_Latitude, New_player_local_rotated_coordinates, Time_passed_since_reference_in_seconds
     #Get the new clipboard content
     new_clipboard = pyperclip.paste()
 
@@ -187,21 +494,22 @@ def readClipboard():
 
                 #---------------------------------------------------Actual Container----------------------------------------------------------------
                 #search in the Databse to see if the player is ina Container
-                Actual_Container = {
-                    "Name": "None",
-                    "X": 0,
-                    "Y": 0,
-                    "Z": 0,
-                    "Rotation Speed": 0,
-                    "Rotation Adjust": 0,
-                    "OM Radius": 0,
-                    "Body Radius": 0,
-                    "POI": {}
-                }
-                for i in Database["Containers"] :
-                    Player_Container_vector = {"X" : Database["Containers"][i]["X"] - New_Player_Global_coordinates["X"], "Y" : Database["Containers"][i]["Y"] - New_Player_Global_coordinates["Y"], "Z" : Database["Containers"][i]["Z"] - New_Player_Global_coordinates["Z"]}
-                    if vector_norm(Player_Container_vector) <= 2 * Database["Containers"][i]["OM Radius"]:
-                        Actual_Container = Database["Containers"][i]
+                #Actual_Container = {
+                #    "Name": "None",
+                #    "X": 0,
+                #    "Y": 0,
+                #    "Z": 0,
+                #    "Rotation Speed": 0,
+                #    "Rotation Adjust": 0,
+                #    "OM Radius": 0,
+                #    "Body Radius": 0,
+                #    "POI": {}
+                #}
+                #for i in Database["Containers"] :
+                #    Player_Container_vector = {"X" : Database["Containers"][i]["X"] - New_Player_Global_coordinates["X"], "Y" : Database["Containers"][i]["Y"] - New_Player_Global_coordinates["Y"], "Z" : Database["Containers"][i]["Z"] - New_Player_Global_coordinates["Z"]}
+                #    if vector_norm(Player_Container_vector) <= 2 * Database["Containers"][i]["OM Radius"]:
+                #        Actual_Container = Database["Containers"][i]
+                Actual_Container = get_current_container(New_Player_Global_coordinates["X"], New_Player_Global_coordinates["Y"], New_Player_Global_coordinates["Z"])
 
 
 
@@ -210,25 +518,26 @@ def readClipboard():
                 Time_passed_since_reference_in_seconds = New_time - Reference_time
 
                 #Grab the rotation speed of the container in the Database and convert it in degrees/s
-                player_Rotation_speed_in_hours_per_rotation = Actual_Container["Rotation Speed"]
-                try:
-                    player_Rotation_speed_in_degrees_per_second = 0.1 * (1/player_Rotation_speed_in_hours_per_rotation)
-                except ZeroDivisionError:
-                    player_Rotation_speed_in_degrees_per_second = 0
+                #player_Rotation_speed_in_hours_per_rotation = Actual_Container["Rotation Speed"]
+                #try:
+                #    player_Rotation_speed_in_degrees_per_second = 0.1 * (1/player_Rotation_speed_in_hours_per_rotation)
+                #except ZeroDivisionError:
+                #    player_Rotation_speed_in_degrees_per_second = 0
                     
                 
                 
                 #Get the actual rotation state in degrees using the rotation speed of the container, the actual time and a rotational adjustment value
-                player_Rotation_state_in_degrees = ((player_Rotation_speed_in_degrees_per_second * Time_passed_since_reference_in_seconds) + Actual_Container["Rotation Adjust"]) % 360
+                #player_Rotation_state_in_degrees = ((player_Rotation_speed_in_degrees_per_second * Time_passed_since_reference_in_seconds) + Actual_Container["Rotation Adjust"]) % 360
 
                 #get the new player unrotated coordinates
-                New_player_local_unrotated_coordinates = {}
-                for i in ['X', 'Y', 'Z']:
-                    New_player_local_unrotated_coordinates[i] = New_Player_Global_coordinates[i] - Actual_Container[i]
+                #New_player_local_unrotated_coordinates = {}
+                #for i in ['X', 'Y', 'Z']:
+                #    New_player_local_unrotated_coordinates[i] = New_Player_Global_coordinates[i] - Actual_Container[i]
 
                 #get the new player rotated coordinates
-                New_player_local_rotated_coordinates = rotate_point_2D(New_player_local_unrotated_coordinates, radians(-1*player_Rotation_state_in_degrees))
-
+                #New_player_local_rotated_coordinates = rotate_point_2D(New_player_local_unrotated_coordinates, radians(-1*player_Rotation_state_in_degrees))
+                New_player_local_rotated_coordinates = get_local_rotated_coordinates(Time_passed_since_reference_in_seconds, New_Player_Global_coordinates["X"], New_Player_Global_coordinates["Y"], New_Player_Global_coordinates["Z"], Actual_Container)
+                
 
 
 
@@ -257,69 +566,72 @@ def readClipboard():
                 if Actual_Container['Name'] != "None":
                     
                     #Cartesian Coordinates
-                    x = New_player_local_rotated_coordinates["X"]
-                    y = New_player_local_rotated_coordinates["Y"]
-                    z = New_player_local_rotated_coordinates["Z"]
+                    #x = New_player_local_rotated_coordinates["X"]
+                    #y = New_player_local_rotated_coordinates["Y"]
+                    #z = New_player_local_rotated_coordinates["Z"]
 
                     #Radius of the container
-                    player_Radius = Actual_Container["Body Radius"]
+                    #player_Radius = Actual_Container["Body Radius"]
 
                     #Radial_Distance
-                    player_Radial_Distance = sqrt(x**2 + y**2 + z**2)
+                    #player_Radial_Distance = sqrt(x**2 + y**2 + z**2)
 
                     #Height
-                    player_Height = player_Radial_Distance - player_Radius
+                    #player_Height = player_Radial_Distance - player_Radius
                     
                     #Longitude
-                    try :
-                        player_Longitude = -1*degrees(atan2(x, y))
-                    except Exception as err:
-                        print(f'Error in Longitude : {err} \nx = {x}, y = {y} \nPlease report this to Valalol#1790 for me to try to solve this issue')
-                        sys.stdout.flush()
-                        player_Longitude = 0
+                    #try :
+                    #    player_Longitude = -1*degrees(atan2(x, y))
+                    #except Exception as err:
+                    #    print(f'Error in Longitude : {err} \nx = {x}, y = {y} \nPlease report this to Valalol#1790 for me to try to solve this issue')
+                    #    sys.stdout.flush()
+                    #    player_Longitude = 0
 
                     #Latitude
-                    try :
-                        player_Latitude = degrees(asin(z/player_Radial_Distance))
-                    except Exception as err:
-                        print(f'Error in Latitude : {err} \nz = {z}, radius = {player_Radial_Distance} \nPlease report this at Valalol#1790 for me to try to solve this issue')
-                        sys.stdout.flush()
-                        player_Latitude = 0
+                    #try :
+                    #    player_Latitude = degrees(asin(z/player_Radial_Distance))
+                    #except Exception as err:
+                    #    print(f'Error in Latitude : {err} \nz = {z}, radius = {player_Radial_Distance} \nPlease report this at Valalol#1790 for me to try to solve this issue')
+                    #    sys.stdout.flush()
+                    #    player_Latitude = 0
+
+                    player_Latitude, player_Longitude, player_Height = get_lat_long_height(New_player_local_rotated_coordinates["X"], New_player_local_rotated_coordinates["Y"], New_player_local_rotated_coordinates["Z"], Actual_Container)
 
                 
                 
                 #-------------------------------------------------target local Long Lat Height--------------------------------------------------
 
                 #Cartesian Coordinates
-                x = Target["X"]
-                y = Target["Y"]
-                z = Target["Z"]
+                #x = Target["X"]
+                #y = Target["Y"]
+                #z = Target["Z"]
 
                 #Radius of the container
-                target_Radius = Database["Containers"][Target["Container"]]["Body Radius"]
+                #target_Radius = Database["Containers"][Target["Container"]]["Body Radius"]
 
                 #Radial_Distance
-                target_Radial_Distance = sqrt(x**2 + y**2 + z**2)
+                #target_Radial_Distance = sqrt(x**2 + y**2 + z**2)
 
                 #Height
-                target_Height = target_Radial_Distance - target_Radius
+                #target_Height = target_Radial_Distance - target_Radius
                 
                 #Longitude
-                try :
-                    target_Longitude = -1*degrees(atan2(x, y))
-                except Exception as err:
-                    print(f'Error in Longitude : {err} \nx = {x}, y = {y} \nPlease report this to Valalol#1790 for me to try to solve this issue')
-                    sys.stdout.flush()
-                    target_Longitude = 0
+                #try :
+                #    target_Longitude = -1*degrees(atan2(x, y))
+                #except Exception as err:
+                #    print(f'Error in Longitude : {err} \nx = {x}, y = {y} \nPlease report this to Valalol#1790 for me to try to solve this issue')
+                #    sys.stdout.flush()
+                #    target_Longitude = 0
 
                 #Latitude
-                try :
-                    target_Latitude = degrees(asin(z/target_Radial_Distance))
-                except Exception as err:
-                    print(f'Error in Latitude : {err} \nz = {z}, radius = {target_Radial_Distance} \nPlease report this at Valalol#1790 for me to try to solve this issue')
-                    sys.stdout.flush()
-                    target_Latitude = 0
+                #try :
+                #    target_Latitude = degrees(asin(z/target_Radial_Distance))
+                #except Exception as err:
+                #    print(f'Error in Latitude : {err} \nz = {z}, radius = {target_Radial_Distance} \nPlease report this at Valalol#1790 for me to try to solve this issue')
+                #    sys.stdout.flush()
+                #    target_Latitude = 0
 
+                target_Latitude, target_Longitude, target_Height = get_lat_long_height(Target["X"], Target["Y"], Target["Z"], Database["Containers"][Target["Container"]])
 
 
 
@@ -383,21 +695,22 @@ def readClipboard():
 
 
                 #----------------------------------------------------Closest Quantumable POI--------------------------------------------------------
-                Target_to_POIs_Distances = []
+                #Target_to_POIs_Distances = []
                 if Target["QTMarker"] == "FALSE":
-                    for POI in Database["Containers"][Target["Container"]]["POI"]:
-                        if Database["Containers"][Target["Container"]]["POI"][POI]["QTMarker"] == "TRUE":
+                    #for POI in Database["Containers"][Target["Container"]]["POI"]:
+                    #    if Database["Containers"][Target["Container"]]["POI"][POI]["QTMarker"] == "TRUE":#
 
-                            Vector_POI_Target = {}
-                            for i in ["X", "Y", "Z"]:
-                                Vector_POI_Target[i] = abs(Target[i] - Database["Containers"][Target["Container"]]["POI"][POI][i])
+                    #        Vector_POI_Target = {}
+                    #        for i in ["X", "Y", "Z"]:
+                    #            Vector_POI_Target[i] = abs(Target[i] - Database["Containers"][Target["Container"]]["POI"][POI][i])
 
-                            Distance_POI_Target = vector_norm(Vector_POI_Target)
+                    #        Distance_POI_Target = vector_norm(Vector_POI_Target)
 
-                            Target_to_POIs_Distances.append({"Name" : POI, "Distance" : Distance_POI_Target})
+                    #        Target_to_POIs_Distances.append({"Name" : POI, "Distance" : Distance_POI_Target})
 
-                    Target_to_POIs_Distances_Sorted = sorted(Target_to_POIs_Distances, key=lambda k: k['Distance'])
-                
+                    #Target_to_POIs_Distances_Sorted = sorted(Target_to_POIs_Distances, key=lambda k: k['Distance'])
+                    Target_to_POIs_Distances_Sorted = get_closest_POI(Target["X"], Target["Y"], Target["Z"], Database["Containers"][Target["Container"]], True)
+
                 else :
                     Target_to_POIs_Distances_Sorted = [{
                         "Name" : "POI itself",
@@ -408,57 +721,61 @@ def readClipboard():
 
 
                 #----------------------------------------------------Player Closest POI--------------------------------------------------------
-                Player_to_POIs_Distances = []
-                for POI in Actual_Container["POI"]:
+                #Player_to_POIs_Distances = []
+                #for POI in Actual_Container["POI"]:
                 
-                    Vector_POI_Player = {}
-                    for i in ["X", "Y", "Z"]:
-                        Vector_POI_Player[i] = abs(New_player_local_rotated_coordinates[i] - Actual_Container["POI"][POI][i])
+                #    Vector_POI_Player = {}
+                #    for i in ["X", "Y", "Z"]:
+                #        Vector_POI_Player[i] = abs(New_player_local_rotated_coordinates[i] - Actual_Container["POI"][POI][i])
 
-                    Distance_POI_Player = vector_norm(Vector_POI_Player)
+                #    Distance_POI_Player = vector_norm(Vector_POI_Player)
 
-                    Player_to_POIs_Distances.append({"Name" : POI, "Distance" : Distance_POI_Player})
+                #    Player_to_POIs_Distances.append({"Name" : POI, "Distance" : Distance_POI_Player})
 
-                Player_to_POIs_Distances_Sorted = sorted(Player_to_POIs_Distances, key=lambda k: k['Distance'])
+                #Player_to_POIs_Distances_Sorted = sorted(Player_to_POIs_Distances, key=lambda k: k['Distance'])
+                Player_to_POIs_Distances_Sorted = get_closest_POI(New_player_local_rotated_coordinates["X"], New_player_local_rotated_coordinates["Y"], New_player_local_rotated_coordinates["Z"], Actual_Container, False)
+
 
 
 
 
 
                 #-------------------------------------------------------3 Closest OMs to player---------------------------------------------------------------
-                player_Closest_OM = {}
+                #player_Closest_OM = {}
                 
-                if New_player_local_rotated_coordinates["X"] >= 0:
-                    player_Closest_OM["X"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-5"], "Distance" : vector_norm({"X" : New_player_local_rotated_coordinates["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-5"]["X"], "Y" : New_player_local_rotated_coordinates["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-5"]["Y"], "Z" : New_player_local_rotated_coordinates["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-5"]["Z"]})}
-                else:
-                    player_Closest_OM["X"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-6"], "Distance" : vector_norm({"X" : New_player_local_rotated_coordinates["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-6"]["X"], "Y" : New_player_local_rotated_coordinates["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-6"]["Y"], "Z" : New_player_local_rotated_coordinates["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-6"]["Z"]})}
-                if New_player_local_rotated_coordinates["Y"] >= 0:
-                    player_Closest_OM["Y"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-3"], "Distance" : vector_norm({"X" : New_player_local_rotated_coordinates["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-3"]["X"], "Y" : New_player_local_rotated_coordinates["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-3"]["Y"], "Z" : New_player_local_rotated_coordinates["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-3"]["Z"]})}
-                else:
-                    player_Closest_OM["Y"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-4"], "Distance" : vector_norm({"X" : New_player_local_rotated_coordinates["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-4"]["X"], "Y" : New_player_local_rotated_coordinates["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-4"]["Y"], "Z" : New_player_local_rotated_coordinates["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-4"]["Z"]})}
-                if New_player_local_rotated_coordinates["Z"] >= 0:
-                    player_Closest_OM["Z"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-1"], "Distance" : vector_norm({"X" : New_player_local_rotated_coordinates["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-1"]["X"], "Y" : New_player_local_rotated_coordinates["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-1"]["Y"], "Z" : New_player_local_rotated_coordinates["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-1"]["Z"]})}
-                else:
-                    player_Closest_OM["Z"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-2"], "Distance" : vector_norm({"X" : New_player_local_rotated_coordinates["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-2"]["X"], "Y" : New_player_local_rotated_coordinates["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-2"]["Y"], "Z" : New_player_local_rotated_coordinates["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-2"]["Z"]})}
+                #if New_player_local_rotated_coordinates["X"] >= 0:
+                #    player_Closest_OM["X"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-5"], "Distance" : vector_norm({"X" : New_player_local_rotated_coordinates["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-5"]["X"], "Y" : New_player_local_rotated_coordinates["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-5"]["Y"], "Z" : New_player_local_rotated_coordinates["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-5"]["Z"]})}
+                #else:
+                #    player_Closest_OM["X"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-6"], "Distance" : vector_norm({"X" : New_player_local_rotated_coordinates["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-6"]["X"], "Y" : New_player_local_rotated_coordinates["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-6"]["Y"], "Z" : New_player_local_rotated_coordinates["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-6"]["Z"]})}
+                #if New_player_local_rotated_coordinates["Y"] >= 0:
+                #    player_Closest_OM["Y"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-3"], "Distance" : vector_norm({"X" : New_player_local_rotated_coordinates["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-3"]["X"], "Y" : New_player_local_rotated_coordinates["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-3"]["Y"], "Z" : New_player_local_rotated_coordinates["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-3"]["Z"]})}
+                #else:
+                #    player_Closest_OM["Y"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-4"], "Distance" : vector_norm({"X" : New_player_local_rotated_coordinates["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-4"]["X"], "Y" : New_player_local_rotated_coordinates["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-4"]["Y"], "Z" : New_player_local_rotated_coordinates["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-4"]["Z"]})}
+                #if New_player_local_rotated_coordinates["Z"] >= 0:
+                #    player_Closest_OM["Z"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-1"], "Distance" : vector_norm({"X" : New_player_local_rotated_coordinates["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-1"]["X"], "Y" : New_player_local_rotated_coordinates["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-1"]["Y"], "Z" : New_player_local_rotated_coordinates["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-1"]["Z"]})}
+                #else:
+                #    player_Closest_OM["Z"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-2"], "Distance" : vector_norm({"X" : New_player_local_rotated_coordinates["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-2"]["X"], "Y" : New_player_local_rotated_coordinates["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-2"]["Y"], "Z" : New_player_local_rotated_coordinates["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-2"]["Z"]})}
 
+                player_Closest_OM = get_closest_oms(New_player_local_rotated_coordinates["X"], New_player_local_rotated_coordinates["Y"], New_player_local_rotated_coordinates["Z"], Actual_Container)
 
 
 
                 #-------------------------------------------------------3 Closest OMs to target---------------------------------------------------------------
-                target_Closest_OM = {}
+                #target_Closest_OM = {}
                 
-                if Target["X"] >= 0:
-                    target_Closest_OM["X"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-5"], "Distance" : vector_norm({"X" : Target["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-5"]["X"], "Y" : Target["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-5"]["Y"], "Z" : Target["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-5"]["Z"]})}
-                else:
-                    target_Closest_OM["X"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-6"], "Distance" : vector_norm({"X" : Target["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-6"]["X"], "Y" : Target["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-6"]["Y"], "Z" : Target["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-6"]["Z"]})}
-                if Target["Y"] >= 0:
-                    target_Closest_OM["Y"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-3"], "Distance" : vector_norm({"X" : Target["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-3"]["X"], "Y" : Target["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-3"]["Y"], "Z" : Target["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-3"]["Z"]})}
-                else:
-                    target_Closest_OM["Y"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-4"], "Distance" : vector_norm({"X" : Target["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-4"]["X"], "Y" : Target["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-4"]["Y"], "Z" : Target["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-4"]["Z"]})}
-                if Target["Z"] >= 0:
-                    target_Closest_OM["Z"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-1"], "Distance" : vector_norm({"X" : Target["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-1"]["X"], "Y" : Target["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-1"]["Y"], "Z" : Target["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-1"]["Z"]})}
-                else:
-                    target_Closest_OM["Z"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-2"], "Distance" : vector_norm({"X" : Target["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-2"]["X"], "Y" : Target["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-2"]["Y"], "Z" : Target["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-2"]["Z"]})}
+                #if Target["X"] >= 0:
+                #    target_Closest_OM["X"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-5"], "Distance" : vector_norm({"X" : Target["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-5"]["X"], "Y" : Target["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-5"]["Y"], "Z" : Target["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-5"]["Z"]})}
+                #else:
+                #    target_Closest_OM["X"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-6"], "Distance" : vector_norm({"X" : Target["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-6"]["X"], "Y" : Target["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-6"]["Y"], "Z" : Target["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-6"]["Z"]})}
+                #if Target["Y"] >= 0:
+                #    target_Closest_OM["Y"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-3"], "Distance" : vector_norm({"X" : Target["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-3"]["X"], "Y" : Target["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-3"]["Y"], "Z" : Target["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-3"]["Z"]})}
+                #else:
+                #    target_Closest_OM["Y"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-4"], "Distance" : vector_norm({"X" : Target["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-4"]["X"], "Y" : Target["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-4"]["Y"], "Z" : Target["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-4"]["Z"]})}
+                #if Target["Z"] >= 0:
+                #    target_Closest_OM["Z"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-1"], "Distance" : vector_norm({"X" : Target["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-1"]["X"], "Y" : Target["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-1"]["Y"], "Z" : Target["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-1"]["Z"]})}
+                #else:
+                #    target_Closest_OM["Z"] = {"OM" : Database["Containers"][Target["Container"]]["POI"]["OM-2"], "Distance" : vector_norm({"X" : Target["X"] - Database["Containers"][Target["Container"]]["POI"]["OM-2"]["X"], "Y" : Target["Y"] - Database["Containers"][Target["Container"]]["POI"]["OM-2"]["Y"], "Z" : Target["Z"] - Database["Containers"][Target["Container"]]["POI"]["OM-2"]["Z"]})}
+                target_Closest_OM = get_closest_oms(Target["X"], Target["Y"], Target["Z"], Database["Containers"][Target["Container"]])
 
 
 
@@ -538,7 +855,28 @@ def readClipboard():
                 else:
                     Flat_angle_color = "#ff3700"
                 
+                #-------------------------------------------------Sunrise Sunset Calculation----------------------------------------------------
+                player_state_of_the_day, player_next_event, player_next_event_time = get_sunset_sunrise_predictions(
+                    New_player_local_rotated_coordinates["X"], 
+                    New_player_local_rotated_coordinates["Y"], 
+                    New_player_local_rotated_coordinates["Z"], 
+                    player_Latitude, 
+                    player_Longitude, 
+                    player_Height, 
+                    Actual_Container, 
+                    Database["Containers"]["Stanton"]
+                )
                 
+                target_state_of_the_day, target_next_event, target_next_event_time = get_sunset_sunrise_predictions(
+                    Target["X"], 
+                    Target["Y"], 
+                    Target["Z"], 
+                    target_Latitude, 
+                    target_Longitude, 
+                    target_Height, 
+                    Database["Containers"][Target["Container"]], 
+                    Database["Containers"]["Stanton"]
+                )
                 
                 
                 #----------------------------------------------------------Heading--------------------------------------------------------------
@@ -588,16 +926,40 @@ def readClipboard():
                 }
                 print("New data :", json.dumps(new_data))
                 sys.stdout.flush()
+                
+                #bomb drop off calculations
+                horizontal_distance = sqrt(pow(New_Distance_to_POI_Total,2) - pow((player_Height - target_Height),2))
+                
                 TPClient.stateUpdate("currentDstName", Target['Name'] )
-                TPClient.stateUpdate("DistanceToDst", f"{round(New_Distance_to_POI_Total, 1)} km" )
+                TPClient.stateUpdate("DistanceToDst", f"{round(New_Distance_to_POI_Total, 1)} km (Hor: {round(horizontal_distance, 1)} km" )
                 TPClient.stateUpdate("Bearing", f"{round(Bearing, 0)}°" )
                 TPClient.stateUpdate("nearestQTMarkerNameDistance", f"{Target_to_POIs_Distances_Sorted[0]['Name']} : {round(Target_to_POIs_Distances_Sorted[0]['Distance'], 1)} km" )
                 where_am_i = "Current: " , Actual_Container['Name'] , ", x:", round(New_player_local_rotated_coordinates['X'], 3), " y:", round(New_player_local_rotated_coordinates['Y'], 3), " z:", round(New_player_local_rotated_coordinates['Z'], 3)
                 print(where_am_i)
                 TPClient.stateUpdate("currentLocationPlayer", str(where_am_i) )
                 
+                #point = (Target["X"], Target["Y"], Target["Z"])
+                #rot_x = asin(New_player_local_rotated_coordinates['Z']/sqrt(pow(New_player_local_rotated_coordinates['Y'],2)+pow(New_player_local_rotated_coordinates['Z',2])))
+                #rot_y = 0
+                #rot_z = asin(New_player_local_rotated_coordinates['Y']/sqrt(pow(New_player_local_rotated_coordinates['X'],2)+pow(New_player_local_rotated_coordinates['Y',2])))
+                #rotation = (rot_x, rot_y, rot_z)
+                #translation = (-New_player_local_rotated_coordinates['X'], -New_player_local_rotated_coordinates['Y'], -New_player_local_rotated_coordinates['Z'])
+                #matrix = matrix(rotation, translation)
+                #print (transform(point, matrix))
+                
+                
+                #horizontal_distance = sqrt(pow(New_Distance_to_POI_Total,2) - pow((player_Height - target_Height),2))
+                #TPClient.stateUpdate("Horizontal_Distance", f"{round(horizontal_distance, 1)}km" )
+                print("Player Height: " + str(player_Height) + " - Target Height: " + str(target_Height) + " Horizontal Distance: " + str(horizontal_distance))
 
-
+                # player_state_of_the_day, player_next_event, player_next_event_time
+                # target_state_of_the_day, target_next_event, target_next_event_time
+                #Sunset_Info
+                player_next_event_time = f"{time.strftime('%H:%M:%S', time.localtime(New_time + player_next_event_time*60))}"
+                target_next_event_time = f"{time.strftime('%H:%M:%S', time.localtime(New_time + target_next_event_time*60))}"
+                
+                print("Sunset_Info", "Dst: " +  str(target_state_of_the_day) + ", " + str(target_next_event) + " at " +  str(target_next_event_time) + " Player: " + str(player_next_event) + " at " + str(player_next_event_time))
+                TPClient.stateUpdate("Sunset_Info", "Dst: " +  str(target_state_of_the_day) + ", " + str(target_next_event) + " at " +  str(target_next_event_time) + " Player: " + str(player_next_event) + " at " + str(player_next_event_time))
 
                
 
@@ -700,6 +1062,10 @@ def onAction(data):
       print("startNav for ", Container_list[planetsListPointer], ", ", Planetary_POI_list[Container_list[planetsListPointer]][poiListPointer] )
       Target = Database["Containers"][Container_list[planetsListPointer]]["POI"][f'{Planetary_POI_list[Container_list[planetsListPointer]][poiListPointer]}']
       TPClient.stateUpdate("currentDstName", Target['Name'] )
+      TPClient.stateUpdate("DistanceToDst", "? km" )
+      TPClient.stateUpdate("Bearing", "-- °" )
+      TPClient.stateUpdate("nearestQTMarkerNameDistance", "--" )
+                
       readClipboard()
       print(Target)
     
@@ -708,6 +1074,10 @@ def onAction(data):
       # get the value from the action data (a string the user specified)
       print("startNav for ", Container_list[planetsListPointer], ", ", custom_x, ", ", custom_y, ", ", custom_z)
       Target = {'Name': 'Custom POI', 'Container': f'{Container_list[planetsListPointer]}', 'X': float(custom_x), 'Y': float(custom_y), 'Z': float(custom_z), "QTMarker": "FALSE"}
+      TPClient.stateUpdate("DistanceToDst", "? km" )
+      TPClient.stateUpdate("Bearing", "-- °" )
+      TPClient.stateUpdate("nearestQTMarkerNameDistance", "--" )
+      
       readClipboard()
       print(Target)
     
@@ -780,8 +1150,11 @@ def onAction(data):
 
     if data['actionId'] == "toggle_wo_qtmarker":
       # get the value from the action data (a string the user specified)
-      if toggle_qt_marker_switch == False: toggle_qt_marker_switch = True
-      else: toggle_qt_marker_switch = False
+      if toggle_qt_marker_switch == 0: toggle_qt_marker_switch = 1
+      elif toggle_qt_marker_switch == 1: toggle_qt_marker_switch = 2
+      elif toggle_qt_marker_switch == 2: toggle_qt_marker_switch = 0
+      else: 
+        print("Something wrong with Toggle switch... should not happen")
       
       print("Toggle wo qt marker to ", toggle_qt_marker_switch)
       poiListPointer = 0

@@ -258,6 +258,18 @@
           "default": "None"
         },
         {
+          "id": "Horizontal_Distance",
+          "type": "text",
+          "desc": "Horizontal Distance to POI",
+          "default": "None"
+        },
+        {
+          "id": "Sunset_Info",
+          "type": "text",
+          "desc": "Sunset Sunrise Info",
+          "default": "None"
+        },
+        {
           "id": "DistanceToDst",
           "type": "text",
           "desc": "Distanze to Destination",
