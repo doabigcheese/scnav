@@ -3,6 +3,7 @@
   "version": 100,
   "name": "SCNav",
   "id": "SCNav",
+  "plugin_start_cmd": "python3 %TP_PLUGIN_FOLDER%SCNav\\plugin.py",
   "categories": [
     {
       "id": "Main",

@@ -1,3 +1,4 @@
+from pathlib import PosixPath
 import TouchPortalAPI as TP
 import json
 import os
@@ -8,6 +9,9 @@ import time
 import datetime
 import csv
 import ntplib
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
+
 
 c = ntplib.NTPClient()
 response = c.request('uk.pool.ntp.org', version=3)
@@ -404,7 +408,67 @@ def get_sunset_sunrise_predictions(X : float, Y : float, Z : float, Latitude : f
         sys.stdout.flush()
         return ["Unknown", "Unknown", 0]
     
+def create_overlay(X : float, Y : float, Z : float, last_X : float, last_Y : float, last_Z : float, Container : dict):
+    # x,y,z: current player location inside OC
+    # todo: QT markers from outside OC
+    # check vectors for known QT Targets
+    # limit vectors to visible QT Targets
+    # draw QT Targets for algnement
+
+    drawCandidates = []
+    x_array = []
+    y_array = []
+    z_array = []
+    plt.box(False)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_frame_on(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
     
+    #calculate direction vector:
+    direction_Vector = {
+        "X": abs(X - last_X),
+        "Y": abs(Y - last_Y),
+        "Z": abs(Z - last_Z)
+    }
+
+    for POI in Container["POI"]:
+        if Container["POI"][POI]["QTMarker"] == "TRUE":
+            Vector_POI = {
+               "X": abs(Container["POI"][POI]["X"] - X),
+               "Y": abs(Container["POI"][POI]["Y"] - Y),
+               "Z": abs(Container["POI"][POI]["Z"] - Z)
+            }
+            plt.plot(Container["POI"][POI]["X"], Container["POI"][POI]["Y"], Container["POI"][POI]["Z"], marker="o", markersize=20, markeredgecolor="red", markerfacecolor="green")
+    
+            #check if in viewport:
+
+            #add to draw-candidates:
+            x_array.append(Vector_POI["X"])
+            y_array.append(Vector_POI["Y"])
+            z_array.append(Vector_POI["Z"])
+            
+            drawCandidates.append({"Name" : POI, "X" : Vector_POI["X"], "Y" : Vector_POI["Y"], "Z" : Vector_POI["Z"]})
+
+        #Distance_POI = vector_norm(Vector_POI)
+        #Distances_to_POIs.append({"Name" : POI, "Distance" : Distance_POI})
+
+
+    #plt.ylim((25,250)) ?
+    plt.plot(X, Y, Z, marker="o", markersize=20, markeredgecolor="red", markerfacecolor="blue")
+    
+    plt.show()
+    #Target_to_POIs_Distances_Sorted = sorted(Distances_to_POIs, key=lambda k: k['Distance'])
+
+
+
+
+
+
+
+
 #Sets some variables
 Reference_time_UTC = datetime.datetime(2020, 1, 1)
 Epoch = datetime.datetime(1970, 1, 1)
@@ -460,13 +524,13 @@ def readClipboard():
 
         #update the memory with the new content
         Old_clipboard = new_clipboard
-        response = c.request('uk.pool.ntp.org', version=3)
-        server_time = response.tx_time
-        local_time = time.time()
-        time_difference = server_time - local_time
-        print(round(time_difference,5))
-        correction_value=time_difference
-        TPClient.stateUpdate ("correction", str(round(correction_value,5) ))
+        #response = c.request('uk.pool.ntp.org', version=3)
+        #server_time = response.tx_time
+        #local_time = time.time()
+        #time_difference = server_time - local_time
+        #print(round(time_difference,5))
+        #correction_value=time_difference
+        #TPClient.stateUpdate ("correction", str(round(correction_value,5) ))
 
         New_time = time.time() + correction_value
         
@@ -546,7 +610,7 @@ def readClipboard():
                 #Grab the rotation speed of the container in the Database and convert it in degrees/s
                 target_Rotation_speed_in_hours_per_rotation = Database["Containers"][Target["Container"]]["Rotation Speed"]
                 try:
-                    target_Rotation_speed_in_degrees_per_second = 0.1 * (1/target_Rotation_speed_in_hours_per_rotation)
+                    target_Rotation_speed_in_degrees_per_second = 0.1 * (1/int(target_Rotation_speed_in_hours_per_rotation))
                 except ZeroDivisionError:
                     target_Rotation_speed_in_degrees_per_second = 0
                     
@@ -961,7 +1025,8 @@ def readClipboard():
                 print("Sunset_Info", "Dst: " +  str(target_state_of_the_day) + ", " + str(target_next_event) + " at " +  str(target_next_event_time) + " Player: " + str(player_next_event) + " at " + str(player_next_event_time))
                 TPClient.stateUpdate("Sunset_Info", "Dst: " +  str(target_state_of_the_day) + ", " + str(target_next_event) + " at " +  str(target_next_event_time) + " Player: " + str(player_next_event) + " at " + str(player_next_event_time))
 
-               
+                #create_overlay(New_Player_Global_coordinates["X"], New_Player_Global_coordinates["Y"], New_Player_Global_coordinates["Z"])
+                #create_overlay(New_player_local_rotated_coordinates['X'],New_player_local_rotated_coordinates['Y'],New_player_local_rotated_coordinates['Z'],Old_player_local_rotated_coordinates['X'],Old_player_local_rotated_coordinates['Y'],Old_player_local_rotated_coordinates['Z'],Database["Containers"][Target["Container"]])
 
 
                 #---------------------------------------------------Update coordinates for the next update------------------------------------------
