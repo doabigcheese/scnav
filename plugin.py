@@ -11,8 +11,10 @@ import csv
 import ntplib
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
+import pydirectinput
+from ahk import AHK
 
-
+ahk = AHK()
 c = ntplib.NTPClient()
 response = c.request('uk.pool.ntp.org', version=3)
 server_time = response.tx_time
@@ -21,6 +23,7 @@ offset = response.offset
 #time_difference = server_time - local_time
 #print(str(time_difference) + " offset: " + str(offset))
 correction_value=offset # time_difference
+print(correction_value)
 
 #required: pip install TouchPortal-API
 #required: python v3.8
@@ -29,7 +32,8 @@ correction_value=offset # time_difference
 TPClient = TP.Client("SCNav")
 
 toggle_qt_marker_switch = 0
-
+breaked_for_belt = False
+first_measure_aaron_belt=True
 planetsListPointer = 0
 edit_coordinate="none"
 poiListPointer = 0
@@ -226,6 +230,23 @@ def get_closest_oms(X : float, Y : float, Z : float, Container : dict):
         Closest_OM["Z"] = {"OM" : Container["POI"]["OM-2"], "Distance" : vector_norm({"X" : X - Container["POI"]["OM-2"]["X"], "Y" : Y - Container["POI"]["OM-2"]["Y"], "Z" : Z - Container["POI"]["OM-2"]["Z"]})}
 
     return Closest_OM
+
+def showlocation():
+    print("showlocation...")
+    #pydirectinput.press("return")
+    #pydirectinput.press("subract")
+    #pydirectinput.typewrite("showlocation")
+    #pydirectinput.press("return")
+    
+    #pydirectinput.hotKey("f24")
+    ahk.send_input('{Enter}')
+    time.sleep(0.5)
+    ahk.send_input("/showlocation")
+    time.sleep(0.1)
+    ahk.send_input('{Enter}')
+    #SetKeyDelay, 25
+
+
 
 
 
@@ -506,7 +527,7 @@ Old_time = time.time()
 
 
 def readClipboard():
-    global Old_clipboard,Target, Old_time, Actual_Container, player_Longitude, player_Latitude, New_player_local_rotated_coordinates, Time_passed_since_reference_in_seconds
+    global Old_clipboard,Target, Old_time, Actual_Container, player_Longitude, player_Latitude, New_player_local_rotated_coordinates, Time_passed_since_reference_in_seconds, breaked_for_belt,first_measure_aaron_belt,Mode
     #Get the new clipboard content
     new_clipboard = pyperclip.paste()
 
@@ -517,6 +538,12 @@ def readClipboard():
         #Wait some time
         #time.sleep(1/5)
         print("no update on clipboard")
+        if Mode == "belt_auto_stop":
+            print("retry...")
+            showlocation()
+            time.sleep(3)
+            readClipboard()
+            
 
 
     #If clipboard content has changed
@@ -1042,6 +1069,115 @@ def readClipboard():
                 Old_time = New_time
 
                 #-------------------------------------------------------------------------------------------------------------------------------------------
+            if Mode == "belt_auto_stop" and breaked_for_belt==False:
+                
+                print("1 Enter belt_auto_stop not breaked...")
+                TPClient.stateUpdate("currentDstName", "Aaron Belt" )
+                #TPClient.stateUpdate("eta", "eta" )
+                TPClient.stateUpdate("speed", "calc" )
+                New_Distance_to_POI = {}
+                
+                for i in ["X", "Y", "Z"]:
+                        New_Distance_to_POI[i] = abs(New_Player_Global_coordinates[i])
+
+                #get the real new distance between the player and the target
+                New_Distance_to_POI_Total = vector_norm(New_Distance_to_POI)
+                if New_Distance_to_POI_Total > 20407000:
+                    TPClient.stateUpdate("DistanceToDst", f"{round(New_Distance_to_POI_Total, 0) - 20407000 } km " )
+                elif New_Distance_to_POI_Total < 20230000:
+                    TPClient.stateUpdate("DistanceToDst", f"{20230000 - round(New_Distance_to_POI_Total, 0) } km " )
+                else:       
+                    TPClient.stateUpdate("DistanceToDst", "Inside belt" )
+                
+                if New_Distance_to_POI_Total > 20230000 and New_Distance_to_POI_Total < 20407000:
+                    # we are in the aaron belt Band 5, lets brake
+                    print("Break QD")
+                    pydirectinput.keyDown("b")
+                    time.sleep(3)
+                    pydirectinput.keyUp('b')
+                    breaked_for_belt = True
+                    #Mode == "Planetary Navigation"
+                    
+                
+                else:
+                    
+                    #---------------------------------------------------Delta Distance to POI-----------------------------------------------------------
+                    #get the real old distance between the player and the target
+                    Old_Distance_to_POI_Total = vector_norm(Old_Distance_to_POI)
+
+                    #get the 3 XYZ distance travelled since last update
+                    Delta_Distance_to_POI = {}
+                    for i in ["X", "Y", "Z"]:
+                        Delta_Distance_to_POI[i] = New_Distance_to_POI[i] - Old_Distance_to_POI[i]
+
+                    #get the real distance travelled since last update
+                    Delta_Distance_to_POI_Total = New_Distance_to_POI_Total - Old_Distance_to_POI_Total
+                    TPClient.stateUpdate("delta_distance", f"{round(Delta_Distance_to_POI_Total, 1)} km " )
+
+                    #---------------------------------------------------Estimated time of arrival to POI------------------------------------------------
+                    #get the time between the last update and this update
+                    Delta_time = New_time - Old_time
+                    print("delta_time: ")
+                    print(Delta_time)
+                    speed=Delta_Distance_to_POI_Total / Delta_time
+                    TPClient.stateUpdate("speed", f"{round(speed, 0) } km/s " )
+                    print("Relative Speed:")
+                    print(speed)
+
+
+                    #get the time it would take to reach destination using the same speed
+                    try :
+                        if New_Distance_to_POI_Total > 20407000:
+                            Estimated_time_of_arrival = ((New_Distance_to_POI_Total - 2040700)/speed)
+                           
+                        elif New_Distance_to_POI_Total < 20230000:
+                            Estimated_time_of_arrival = (((20230000 - New_Distance_to_POI_Total))/speed)
+                        
+                    except ZeroDivisionError:
+                        Estimated_time_of_arrival = 99999
+                        
+                    print(Estimated_time_of_arrival)      
+                    
+                    TPClient.stateUpdate("eta", f"{round(Estimated_time_of_arrival)} s " )
+                    
+                    if Estimated_time_of_arrival < 10 and Estimated_time_of_arrival > 0 and first_measure_aaron_belt == False:
+                        # prepare stop timebased
+                        time.sleep(Estimated_time_of_arrival)
+                        pydirectinput.keyDown("b")
+                        time.sleep(3)
+                        pydirectinput.keyUp('b')
+                        #Mode == "Planetary Navigation"
+                        breaked_for_belt = True
+                        
+                    #---------------------------------------------------Update coordinates for the next update------------------------------------------
+                    for i in ["X", "Y", "Z"]:
+                        Old_player_Global_coordinates[i] = New_Player_Global_coordinates[i]
+
+                    for i in ["X", "Y", "Z"]:
+                        Old_Distance_to_POI[i] = New_Distance_to_POI[i]
+
+                    Old_time = New_time
+                    first_measure_aaron_belt=False
+                    showlocation()
+                    time.sleep(3)
+                    readClipboard()
+                    
+                if Mode == "belt_auto_stop" and breaked_for_belt==True:
+                    New_Distance_to_POI = {}
+                
+                    for i in ["X", "Y", "Z"]:
+                            New_Distance_to_POI[i] = abs(New_Player_Global_coordinates[i])
+
+                    #get the real new distance between the player and the target
+                    New_Distance_to_POI_Total = vector_norm(New_Distance_to_POI)
+                    TPClient.stateUpdate("DistanceToDst", f"{round(New_Distance_to_POI_Total, 0) } km " )
+                    TPClient.stateUpdate("currentDstName", "Stanton" )
+                    breaked_for_belt=False
+                    Mode = "Planetary Navigation"
+                    first_measure_aaron_belt=True
+                    
+
+                
 
 def add_char(newChar):
     global custom_x,custom_y,custom_z,edit_coordinate
@@ -1082,7 +1218,7 @@ def onStart(data):
 @TPClient.on(TP.TYPES.onAction) # Or 'action'
 
 def onAction(data):
-    global planetsListPointer,poiListPointer,Container_list, Planetary_POI_list, Target, Actual_Container, toggle_qt_marker_switch,custom_x,custom_y,custom_z,edit_coordinate
+    global planetsListPointer,poiListPointer,Container_list, Planetary_POI_list, Target, Actual_Container, toggle_qt_marker_switch,custom_x,custom_y,custom_z,edit_coordinate,Mode,first_measure_aaron_belt,breaked_for_belt
     print(data)
     # do something based on the action ID and the data value
     
@@ -1121,7 +1257,19 @@ def onAction(data):
         print("DownPoiName ", str(poiListPointer))
         TPClient.stateUpdate("selectedPOI", Planetary_POI_list[Container_list[planetsListPointer]][poiListPointer] )
         
-        
+    if data['actionId'] == "mode_switch":
+      if Mode == "Planetary Navigation":
+          Mode = "belt_auto_stop"
+          breaked_for_belt=False
+          first_measure_aaron_belt=True
+          TPClient.stateUpdate("currentDstName", "Aaron Belt" )
+          showlocation()
+          time.sleep(3)
+          readClipboard()
+      else:
+          Mode = "Planetary Navigation"
+          TPClient.stateUpdate("currentDstName", "----" )
+                    
     if data['actionId'] == "startNav":
       # get the value from the action data (a string the user specified)
       print("startNav for ", Container_list[planetsListPointer], ", ", Planetary_POI_list[Container_list[planetsListPointer]][poiListPointer] )

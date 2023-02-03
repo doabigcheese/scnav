@@ -3,7 +3,7 @@
   "version": 100,
   "name": "SCNav",
   "id": "SCNav",
-  "plugin_start_cmd": "python3 %TP_PLUGIN_FOLDER%SCNav\\plugin.py",
+  "plugin_start_cmd": "%TP_PLUGIN_FOLDER%SCNav\\start__.bat",
   "categories": [
     {
       "id": "Main",
@@ -53,6 +53,14 @@
           "name": "Start Navigation",
           "type": "communicate",
           "label": "Start Nav",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "mode_switch",
+          "name": "Mode Switch",
+          "type": "communicate",
+          "label": "Mode Switch",
           "prefix":"Plugin"
           
         },
@@ -316,6 +324,24 @@
           "id": "correction",
           "type": "text",
           "desc": "Correction Value",
+          "default": "None"
+        },
+        {
+          "id": "eta",
+          "type": "text",
+          "desc": "Time to destination",
+          "default": "None"
+        },
+        {
+          "id": "speed",
+          "type": "text",
+          "desc": "Calculated Speed",
+          "default": "None"
+        },
+        {
+          "id": "delta_distance",
+          "type": "text",
+          "desc": "Traveld Distance since last update",
           "default": "None"
         }
       ]
