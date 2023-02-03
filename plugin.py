@@ -1119,7 +1119,7 @@ def readClipboard():
                     Delta_time = New_time - Old_time
                     print("delta_time: ")
                     print(Delta_time)
-                    speed=Delta_Distance_to_POI_Total / Delta_time
+                    speed=abs(Delta_Distance_to_POI_Total / Delta_time)
                     TPClient.stateUpdate("speed", f"{round(speed, 0) } km/s " )
                     print("Relative Speed:")
                     print(speed)
