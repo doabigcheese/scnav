@@ -16,7 +16,7 @@ from ahk import AHK
 
 ahk = AHK()
 c = ntplib.NTPClient()
-response = c.request('uk.pool.ntp.org', version=3)
+response = c.request('de.pool.ntp.org', version=3)
 server_time = response.tx_time
 offset = response.offset
 #local_time = time.time()
@@ -540,9 +540,9 @@ def readClipboard():
         print("no update on clipboard")
         if Mode == "belt_auto_stop":
             print("retry...")
-            showlocation()
-            time.sleep(3)
-            readClipboard()
+            #showlocation()
+            #time.sleep(3)
+            #readClipboard()
             
 
 
@@ -1139,8 +1139,13 @@ def readClipboard():
                     print(Estimated_time_of_arrival)      
                     
                     TPClient.stateUpdate("eta", f"{round(Estimated_time_of_arrival)} s " )
-                    
-                    if Estimated_time_of_arrival < 10 and Estimated_time_of_arrival > 0 and first_measure_aaron_belt == False:
+                    if Estimated_time_of_arrival > 30 and first_measure_aaron_belt == False:
+                        time.sleep(15)
+                        showlocation()
+                        #time.sleep(3)
+                        #readClipboard()
+
+                    if Estimated_time_of_arrival < 6 and Estimated_time_of_arrival > 0 and first_measure_aaron_belt == False:
                         # prepare stop timebased
                         time.sleep(Estimated_time_of_arrival)
                         pydirectinput.keyDown("b")
@@ -1159,8 +1164,8 @@ def readClipboard():
                     Old_time = New_time
                     first_measure_aaron_belt=False
                     showlocation()
-                    time.sleep(3)
-                    readClipboard()
+                    #time.sleep(3)
+                    #readClipboard()
                     
                 if Mode == "belt_auto_stop" and breaked_for_belt==True:
                     New_Distance_to_POI = {}
@@ -1170,7 +1175,7 @@ def readClipboard():
 
                     #get the real new distance between the player and the target
                     New_Distance_to_POI_Total = vector_norm(New_Distance_to_POI)
-                    TPClient.stateUpdate("DistanceToDst", f"{round(New_Distance_to_POI_Total, 0) } km " )
+                    TPClient.stateUpdate("DistanceToDst", f"{round(New_Distance_to_POI_Total, 0) } km  - Delta: " + str(abs(New_Distance_to_POI_Total - 20300000)) + " km")
                     TPClient.stateUpdate("currentDstName", "Stanton" )
                     breaked_for_belt=False
                     Mode = "Planetary Navigation"
@@ -1265,7 +1270,8 @@ def onAction(data):
           TPClient.stateUpdate("currentDstName", "Aaron Belt" )
           showlocation()
           time.sleep(3)
-          readClipboard()
+          while Mode == "belt_auto_stop":
+            readClipboard()
       else:
           Mode = "Planetary Navigation"
           TPClient.stateUpdate("currentDstName", "----" )
