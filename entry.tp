@@ -17,6 +17,67 @@
       ],  
       "actions": [
         {
+          "id": "wildcard_chat_text",
+          "name": "Send selected Text to Chat",
+          "prefix": "Plugin",
+          "type": "communicate",
+          "tryInline": true,
+          "format": "Send Text to Chat {$SCNav_wildcard_text$}",
+          "data": [
+            {
+              "id": "SCNav_wildcard_text",
+              "label": "Set_wildcard_chat_text",
+              "type": "text",
+              "allowDecimals": false,
+              "default": "0"
+            }
+          ]
+        },
+        {
+          "id": "SCNav_emote",
+          "name": "Send emote to chat",
+          "prefix": "plugin",
+          "type": "communicate",
+          "tryInline": true,
+          "format": "Send emote {$SCNav_emote.Choice$} ",
+          "data": [
+            {
+              "id": "SCNav_emote.Choice",
+              "type": "choice",
+              "label": "choice",
+              "default": "Next",
+              "valueChoices": [
+                "/wave",
+                "/dance",
+                "/attention",
+                "/blah2",
+                "/bored1",
+                "/bow6",
+                "/cheer8",
+                "/chicken",
+                "/clap7",
+                "/come1",
+                "/cry",
+                "/flex1",
+                "/flirt",
+                "/gloat1",
+                "/greet",
+                "/laugh1",
+                "/point2",
+                "/rude3",
+                "/salute1",
+                "/sit",
+                "/sleep",
+                "/smell1",
+                "/threaten2",
+                "/wait2",
+                "/whistle1"
+
+              ]
+            }
+          ]
+        },
+        {
           "id": "UpPlanet",
           "name": "Scrolling Planet List up",
           "type": "communicate",
@@ -77,6 +138,14 @@
           "name": "Update Location",
           "type": "communicate",
           "label": "Update Location",
+          "prefix":"Plugin"
+          
+        },
+        {
+          "id": "readClipboard",
+          "name": "readClipboard",
+          "type": "communicate",
+          "label": "readClipboard",
           "prefix":"Plugin"
           
         },

@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import pydirectinput
 from ahk import AHK
 
+
 ahk = AHK()
 c = ntplib.NTPClient()
 response = c.request('de.pool.ntp.org', version=3)
@@ -58,26 +59,68 @@ for i in Database["Containers"]:
 Planetary_POI_list = {}
 container_name = ""
 Database_own = ""
+csv_data = False
 
 def loadPOIList():
-    global Planetary_POI_list, container_name, Database, Database_own
+    global Planetary_POI_list, container_name, Database, Database_own, csv_data, Container_list
     print("loadPOIList")
     Planetary_POI_list.clear()
-    
-    for container_name in Database["Containers"]:
-        Planetary_POI_list[container_name] = []
-        for poi in Database["Containers"][container_name]["POI"]:
-            if toggle_qt_marker_switch == 0: #without QT marker
-                if Database["Containers"][container_name]["POI"][poi]["QTMarker"] == "FALSE": 
+    data={}
+    if csv_data == True:
+        print("csv_data true")
+        filename = '318data.csv'
+        for single_container in Container_list:
+            data.update({single_container:{}})
+        print(data)
+        with open(filename, 'r') as f:
+            reader = csv.reader(f)
+            headers = next(reader)
+            for row in reader:
+                if row[5] and row[6] and row[7]:
+                    container = row[0].split(" ")[0]
+                    print(container)
+                    if container in data:
+                        if row[12] == "":
+                            qtm = "FALSE"
+                        else:
+                            qtm = "TRUE"    
+                        data[container].update({"Container": container, "Name": row[3], "X": row[5], "Y": row[6], "Z": row[7], "QTMarker":qtm})
+                    else:
+                        print(container + " - "+ row[3] + " rejected for POis" )    
+        print("csv data imported")
+        print(data)
+        for container_name in Database["Containers"]:
+            Planetary_POI_list[container_name] = []
+            for poi in data[container_name]:
+                print(poi)
+                if toggle_qt_marker_switch == 0: #without QT marker
+                    if data[container_name][poi]["QTMarker"] == "FALSE": 
+                        Planetary_POI_list[container_name].append(poi)
+                        print("false:", poi)
+                elif toggle_qt_marker_switch == 1: #saved pois
+                    print("Loading saved POI list...")
+                    with open('saved_pois.json') as f:
+                        Database_own = json.load(f)
+                else: #complete database.json               
                     Planetary_POI_list[container_name].append(poi)
-                    print("false:", poi)
-            elif toggle_qt_marker_switch == 1: #saved pois
-                print("Loading saved POI list...")
-                with open('saved_pois.json') as f:
-                    Database_own = json.load(f)
-            else: #complete database.json               
-                Planetary_POI_list[container_name].append(poi)
-                print("true:", poi)        
+                    print("true:", poi)        
+                
+        
+    else:   #original Database.json 
+        for container_name in Database["Containers"]:
+            Planetary_POI_list[container_name] = []
+            for poi in Database["Containers"][container_name]["POI"]:
+                if toggle_qt_marker_switch == 0: #without QT marker
+                    if Database["Containers"][container_name]["POI"][poi]["QTMarker"] == "FALSE": 
+                        Planetary_POI_list[container_name].append(poi)
+                        print("false:", poi)
+                elif toggle_qt_marker_switch == 1: #saved pois
+                    print("Loading saved POI list...")
+                    with open('saved_pois.json') as f:
+                        Database_own = json.load(f)
+                else: #complete database.json               
+                    Planetary_POI_list[container_name].append(poi)
+                    print("true:", poi)        
     TPClient.stateUpdate("selectedPlanet",  Container_list[planetsListPointer])
     TPClient.stateUpdate("selectedPOI", Planetary_POI_list[Container_list[planetsListPointer]][0] )
     
@@ -246,8 +289,13 @@ def showlocation():
     ahk.send_input('{Enter}')
     #SetKeyDelay, 25
 
-
-
+def send_chat_text(message):
+    print("send_chat_text: " + message)
+    ahk.send_input('{Enter}')
+    time.sleep(0.5)
+    ahk.send_input(message)
+    time.sleep(0.4)
+    ahk.send_input('{Enter}')
 
 
 def get_sunset_sunrise_predictions(X : float, Y : float, Z : float, Latitude : float, Longitude : float, Height : float, Container : dict, Star : dict):
@@ -1153,6 +1201,7 @@ def readClipboard():
                         pydirectinput.keyUp('b')
                         #Mode == "Planetary Navigation"
                         breaked_for_belt = True
+                        time.sleep(3)
                         
                     #---------------------------------------------------Update coordinates for the next update------------------------------------------
                     for i in ["X", "Y", "Z"]:
@@ -1226,7 +1275,24 @@ def onAction(data):
     global planetsListPointer,poiListPointer,Container_list, Planetary_POI_list, Target, Actual_Container, toggle_qt_marker_switch,custom_x,custom_y,custom_z,edit_coordinate,Mode,first_measure_aaron_belt,breaked_for_belt
     print(data)
     # do something based on the action ID and the data value
+    #if data['actionId'] == "KillerBOSS.TouchPortal.Plugin.YTMD.Action.Next/Previous":
+    #        if data['data'][0]['value'] == "Next":
+    #            YTMD_Actions("track-next")
+    #        elif data['data'][0]['value'] == "Previous":
+    #            YTMD_Actions("track-previous")
     
+    
+    if data['actionId'] == "wildcard_chat_text":
+        freetext = data['data'][0]['value']
+        print(freetext)
+        send_chat_text(freetext)
+
+    if data['actionId'] == "SCNav_emote":
+        emote = data['data'][0]['value']
+        print(emote)
+        send_chat_text(emote)
+
+
     if data['actionId'] == "UpPlanet":
       # get the value from the action data (a string the user specified)
       if planetsListPointer > 0: 
@@ -1284,7 +1350,8 @@ def onAction(data):
       TPClient.stateUpdate("DistanceToDst", "? km" )
       TPClient.stateUpdate("Bearing", "-- °" )
       TPClient.stateUpdate("nearestQTMarkerNameDistance", "--" )
-                
+      showlocation()
+      time.sleep(3)          
       readClipboard()
       print(Target)
     
@@ -1296,7 +1363,8 @@ def onAction(data):
       TPClient.stateUpdate("DistanceToDst", "? km" )
       TPClient.stateUpdate("Bearing", "-- °" )
       TPClient.stateUpdate("nearestQTMarkerNameDistance", "--" )
-      
+      showlocation()
+      time.sleep(3)
       readClipboard()
       print(Target)
     
@@ -1412,8 +1480,15 @@ def onAction(data):
     if data['actionId'] == "updateLocation":
       # get the value from the action data (a string the user specified)
       print("updateLocation")
-      
+      showlocation()
+      time.sleep(3)
       readClipboard()
+
+    if data['actionId'] == "readClipboard":
+      # get the value from the action data (a string the user specified)
+      print("readClipboard")
+      
+      readClipboard()  
 
 # Shutdown handler, called when Touch Portal wants to stop your plugin.
 @TPClient.on(TP.TYPES.onShutdown) # or 'closePlugin'
